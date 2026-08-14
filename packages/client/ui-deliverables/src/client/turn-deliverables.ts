@@ -1,13 +1,10 @@
 /**
  * Turn-scoped produced-file Definition and readers. Client-only and
  * model-free: the vocabulary is the mutation tools' own follow-along
- * `locations`, never the closing prose. Alongside the turn's produced
- * paths, each Turn publishes the conversation-cumulative change history
- * for those paths (chained across Turns by the start reader), which the
- * produced-files row's per-file line stats and expandable diff read.
+ * `locations`, never the closing prose.
  */
 import type {
-  ConversationEventInput, ConversationNodeDefinition, ToolResultNode,
+  ConversationNodeDefinition, ToolResultNode,
 } from '@deepseek-ai/dsh-client-runtime/client'
 import { isAppendSurfaceEvent } from '@deepseek-ai/dsh-client-runtime/client'
 import type { MarkdownFileMentions } from '@deepseek-ai/dsh-client-ui-primitives'
@@ -18,30 +15,9 @@ interface ProducedPath {
   readonly path: string
 }
 
-/** One applied change's content pair, in the primitive's `DiffHunk` shape minus the path. */
-export interface ProducedHunk {
-  readonly oldText: string | null
-  readonly newText: string
-}
-
-/** One produced path plus its conversation history, the row's per-chip input. */
-export interface ProducedFileMatch {
-  readonly path: string
-  /** This conversation's applied hunks for the path; empty when no tool reported content. */
-  readonly hunks: readonly ProducedHunk[]
-}
-
 /** Immutable produced-file facts published against one Turn. */
 export interface DeliverablesTurnData {
   readonly produced: readonly ProducedPath[]
-  /**
-   * Conversation-cumulative applied hunks per path, in call order. Each
-   * Turn's start chains the previous Turn's map, so a chip's badge and
-   * expanded diff cover every edit the conversation made to its file —
-   * not only the closing Turn's. A compacted window that drops the prior
-   * Turn simply restarts the history from empty.
-   */
-  readonly history: ReadonlyMap<string, readonly ProducedHunk[]>
 }
 
 declare module '@deepseek-ai/dsh-client-runtime/client' {
@@ -63,61 +39,14 @@ interface DeliverablesState extends DeliverablesTurnData {
  * nothing to open — a read looked, a delete removed, a terminal ran. Only
  * root call views enter this Turn accumulator; nested Code Mode dispatches
  * preserve the pre-assembly behavior and do not contribute independently.
- * The caller guards the null call view before this runs.
  */
-function producedPaths(view: Exclude<ToolResultNode['callView'], null>): readonly string[] {
+function producedPaths(view: ToolResultNode['callView']): readonly string[] {
+  if (view === null) return []
   if (view.card === 'diff') return (view.locations ?? []).map(location => location.path)
   if (view.card === 'generic' && view.kind === 'edit') {
     return (view.locations ?? []).map(location => location.path)
   }
   return []
-}
-
-/** A change hunk as a tool view carries it (the contract's `FileDiff` shape). */
-interface DiffLike {
-  readonly path: string
-  readonly oldText: string | null
-  readonly newText: string
-}
-
-/**
- * The applied hunks of a settled mutation call, or null when neither view
- * carries a usable diff. The result view is authoritative — write/edit tools
- * return the APPLIED contextual hunks there — and the call view (the intended
- * change derived from the args) is the fallback when the result carries none
- * (a running call, a view that never arrives, a generic-error result). The
- * view crosses the wire and only its `card` string is validated upstream, so
- * like the diff-card model, malformed `diffs` narrow to null instead of
- * crashing the accumulator. The caller returns on a null call view — a result
- * whose call left no stored view (a window boundary) contributes nothing — so
- * this function only ever sees stored call views.
- * @param event - the settled `tool/result` match.
- * @param callView - the paired call view, already stored in the Turn state.
- * @returns the validated hunks, or null when unusable.
- */
-function mutationDiffs(
-  event: ConversationEventInput,
-  callView: Exclude<ToolResultNode['callView'], null>,
-): readonly DiffLike[] | null {
-  // The result view is authoritative once the call settles: a diff card there
-  // is the applied change, and a non-diff result (the tool chose the generic
-  // card, e.g. an execution error kept off the diff path) carries no hunks.
-  // Only when no result view arrives at all (a view that never crosses the
-  // wire) does the call view's intended change stand in.
-  const eventView = event.view?.for === 'result' ? event.view.view : undefined
-  if (eventView !== undefined && eventView.card !== 'diff') return null
-  const view = eventView?.card === 'diff' ? eventView : callView
-  if (view.card !== 'diff') return null
-  if (!Array.isArray(view.diffs) || view.diffs.length === 0) return null
-  const out: DiffLike[] = []
-  for (const hunk of view.diffs as unknown as unknown[]) {
-    if (typeof hunk !== 'object' || hunk === null) return null
-    const { path, oldText, newText } = hunk as Record<string, unknown>
-    if (typeof path !== 'string' || typeof newText !== 'string') return null
-    if (oldText !== null && typeof oldText !== 'string') return null
-    out.push({ path, oldText, newText })
-  }
-  return out
 }
 
 /**
@@ -158,40 +87,11 @@ export function producedForClosing(
 /**
  * Claim the turn-tail chain only when its closing turn produced files.
  * @param owner - Turn-tail owner currency for the closing assistant.
- * @returns Produced matches (path plus conversation history) as the component's
- * input, or null to decline before mount.
+ * @returns Produced paths as the component's match, or null to decline before mount.
  */
-export function selectProducedFiles(owner: TurnTailOwnerProps): readonly ProducedFileMatch[] | null {
-  const data = owner.turn.data.get('deliverables')
-  const paths = producedForClosing(data, owner.seq)
-  if (paths.length === 0) return null
-  const history = data?.history
-  return paths.map(path => ({ path, hunks: history?.get(path) ?? [] }))
-}
-
-/**
- * Added/removed line totals for one path's conversation history, with the
- * same counting the diff primitive draws: every old-side content line
- * removed, every new-side content line added, empty text zero lines, and a
- * single trailing newline a terminator rather than an extra line.
- * @param hunks - the path's accumulated applied hunks.
- * @returns the `+added -removed` totals the chip badge shows.
- */
-export function diffStats(hunks: readonly ProducedHunk[]): { added: number; removed: number } {
-  let added = 0
-  let removed = 0
-  for (const hunk of hunks) {
-    added += sideLines(hunk.newText)
-    removed += sideLines(hunk.oldText)
-  }
-  return { added, removed }
-}
-
-/** Content-line count of one diff side, following DiffBlock's terminator rule. */
-function sideLines(text: string | null): number {
-  if (text === null || text === '') return 0
-  const body = text.endsWith('\n') ? text.slice(0, -1) : text
-  return body.split('\n').length
+export function selectProducedFiles(owner: TurnTailOwnerProps): readonly string[] | null {
+  const paths = producedForClosing(owner.turn.data.get('deliverables'), owner.seq)
+  return paths.length === 0 ? null : paths
 }
 
 /** Turn-local successful mutation accumulator; it publishes no view Node. */
@@ -205,18 +105,9 @@ export const deliverablesDefinition: ConversationNodeDefinition<DeliverablesStat
     }
     return null
   },
-  start: (_context, match, reader) => {
+  start: (_context, match) => {
     if (match.event.type !== 'turn/start') throw new Error('deliverables start requires turn/start')
-    const previous = reader.previous<DeliverablesState>('deliverables')
-    return {
-      turn: match.event.data.turn,
-      calls: new Map(),
-      produced: [],
-      // Chain the previous Turn's conversation history; its absence (a fresh
-      // conversation, or a compacted window that dropped the prior Turn) is
-      // the empty history.
-      history: new Map(previous?.state.history ?? []),
-    }
+    return { turn: match.event.data.turn, calls: new Map(), produced: [] }
   },
   update: (context, match) => {
     if (match.event.type === 'tool/call') {
@@ -231,24 +122,11 @@ export const deliverablesDefinition: ConversationNodeDefinition<DeliverablesStat
     const result = match.event.data.message.content[0]
     if (result.isError === true) return context.state
     const callId = String(match.event.data.message.source.callId)
-    const view = context.state.calls.get(callId) ?? null
-    // A result whose call left no stored view (a window boundary) contributes
-    // nothing; the mutationDiffs contract then sees a non-null call view.
-    if (view === null) return context.state
-    const additions = producedPaths(view)
+    const additions = producedPaths(context.state.calls.get(callId) ?? null)
       .map(path => ({ seq: match.event.seq, path }))
-    if (additions.length === 0) return context.state
-    const diffs = mutationDiffs(match, view)
-    const history = new Map(context.state.history)
-    for (const produced of additions) {
-      const hunks = diffs === null
-        ? []
-        : diffs.filter(diff => diff.path === produced.path)
-          .map(({ oldText, newText }) => ({ oldText, newText }))
-      if (hunks.length === 0) continue
-      history.set(produced.path, [...(history.get(produced.path) ?? []), ...hunks])
-    }
-    return { ...context.state, produced: [...context.state.produced, ...additions], history }
+    return additions.length === 0
+      ? context.state
+      : { ...context.state, produced: [...context.state.produced, ...additions] }
   },
   buildLocationData: (context, scope) => scope !== 'turn' || context.state === undefined
     ? null
@@ -256,7 +134,7 @@ export const deliverablesDefinition: ConversationNodeDefinition<DeliverablesStat
       kind: 'turn',
       turn: context.state.turn,
       key: 'deliverables',
-      value: { produced: context.state.produced, history: context.state.history },
+      value: { produced: context.state.produced },
     },
 }
 
@@ -268,16 +146,6 @@ export const deliverablesDefinition: ConversationNodeDefinition<DeliverablesStat
 export function basename(path: string): string {
   const at = Math.max(path.lastIndexOf('/'), path.lastIndexOf('\\'))
   return at === -1 ? path : path.slice(at + 1)
-}
-
-/**
- * Leading path segments, the location that sets a deep path apart.
- * @param path - Slash- or backslash-separated path.
- * @returns The segments before the final one, or the empty string when separator-free.
- */
-export function dirname(path: string): string {
-  const at = Math.max(path.lastIndexOf('/'), path.lastIndexOf('\\'))
-  return at === -1 ? '' : path.slice(0, at)
 }
 
 /**

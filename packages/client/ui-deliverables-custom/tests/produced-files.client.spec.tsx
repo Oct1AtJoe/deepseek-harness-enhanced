@@ -23,7 +23,7 @@ import {
   fitProducedFiles, ProducedFiles, type ProducedFilesProps,
 } from '../src/client/ProducedFiles.tsx'
 import {
-  basename, deliverablesDefinition, producedFileMentions, producedForClosing, selectProducedFiles,
+  basename, deliverablesDefinition, diffStats, dirname, producedFileMentions, producedForClosing, selectProducedFiles,
   type DeliverablesTurnData,
 } from '../src/client/turn-deliverables.ts'
 import { apply, inject } from '../src/client/index.ts'
@@ -66,8 +66,11 @@ const turnLocation = (turn: number, deliverables?: DeliverablesTurnData): TurnLo
   return { turn, start: undefined, end: undefined, status: 'closed', steps: [], data }
 }
 
-const produced = (...values: ReadonlyArray<readonly [seq: number, path: string]>): DeliverablesTurnData => ({
+const produced = (
+  ...values: ReadonlyArray<readonly [seq: number, path: string]>
+): DeliverablesTurnData => ({
   produced: values.map(([seq, path]) => ({ seq, path })),
+  history: new Map(),
 })
 
 function tailOwner(
@@ -148,6 +151,11 @@ function result(seq: number, callId: string, isError = false, turn = 1): Convers
   })
 }
 
+function resultView(seq: number, callId: string, view: ConversationEventInput['view'], turn = 1): ConversationEventInput {
+  const settled = result(seq, callId, false, turn)
+  return { ...settled, view }
+}
+
 function diff(...paths: string[]): ToolResultNode['callView'] {
   return {
     card: 'diff', title: `Write ${paths[0] ?? ''}`,
@@ -181,7 +189,10 @@ describe('produced-file Turn data', () => {
       [8, 'after.txt'],
     )
     expect(producedForClosing(data, 6)).toEqual(['out/index.html', 'out/app.css'])
-    expect(selectProducedFiles(tailOwner(data, 6))).toEqual(['out/index.html', 'out/app.css'])
+    expect(selectProducedFiles(tailOwner(data, 6))).toEqual([
+      { path: 'out/index.html', hunks: [] },
+      { path: 'out/app.css', hunks: [] },
+    ])
     expect(producedForClosing(undefined)).toEqual([])
     expect(selectProducedFiles(tailOwner(undefined, 9, () => {}, 2))).toBeNull()
   })
@@ -276,6 +287,130 @@ describe('produced-file Turn data', () => {
     value.flush()
     expect(producedForClosing(deliverablesOf(value))).toEqual(['first.txt', 'second.txt'])
   })
+
+  it('captures applied hunks from the result view and falls back to the call view', () => {
+    const value = assembler([
+      at(1, 'turn/start', { turn: 1 }),
+      call(2, 'write', diff('out/a.txt')),
+      resultView(3, 'write', {
+        for: 'result',
+        view: { card: 'diff', diffs: [{ path: 'out/a.txt', oldText: 'old\n', newText: 'new\n' }] },
+      }),
+      call(4, 'edit', {
+        card: 'diff', title: 'Edit out/b.txt',
+        diffs: [{ path: 'out/b.txt', oldText: null, newText: 'hello\n' }],
+        locations: [{ path: 'out/b.txt' }],
+      }),
+      result(5, 'edit'),
+    ])
+    const data = deliverablesOf(value)
+    expect(producedForClosing(data)).toEqual(['out/a.txt', 'out/b.txt'])
+    // The applied hunks ride the result view; without one, the call view's
+    // intended change is the fallback.
+    expect(data?.history.get('out/a.txt')).toEqual([{ oldText: 'old\n', newText: 'new\n' }])
+    expect(data?.history.get('out/b.txt')).toEqual([{ oldText: null, newText: 'hello\n' }])
+  })
+
+  it('ignores malformed or non-diff result views and generic-edit calls carry no hunks', () => {
+    const value = assembler([
+      at(1, 'turn/start', { turn: 1 }),
+      call(2, 'write', diff('out/a.txt')),
+      resultView(3, 'write', { for: 'result', view: { card: 'generic', title: 'Write' } }),
+      call(4, 'insert', edit('notes.md')),
+      resultView(5, 'insert', { for: 'result', view: { card: 'generic', title: 'Edit' } }),
+      call(6, 'bad', diff('broken.txt')),
+      resultView(7, 'bad', {
+        for: 'result',
+        view: { card: 'diff', diffs: 'nope' } as never,
+      }),
+      // Hostile hunk payloads at the wire boundary narrow to no hunks, like
+      // the diff-card model: a non-object entry, a null entry, a non-string
+      // path, a non-string newText, and a non-string oldText.
+      call(8, 'hunk-junk', diff('junk.txt')),
+      resultView(9, 'hunk-junk', {
+        for: 'result',
+        view: { card: 'diff', diffs: ['junk', null] } as never,
+      }),
+      call(10, 'bad-path', diff('bad-path.txt')),
+      resultView(11, 'bad-path', {
+        for: 'result',
+        view: { card: 'diff', diffs: [{ path: 5, newText: 'x' }] } as never,
+      }),
+      call(12, 'bad-new', diff('bad-new.txt')),
+      resultView(13, 'bad-new', {
+        for: 'result',
+        view: { card: 'diff', diffs: [{ path: 'x', newText: 5 }] } as never,
+      }),
+      call(14, 'bad-old', diff('bad-old.txt')),
+      resultView(15, 'bad-old', {
+        for: 'result',
+        view: { card: 'diff', diffs: [{ path: 'x', newText: 'y', oldText: 5 }] } as never,
+      }),
+    ])
+    const data = deliverablesOf(value)
+    expect(producedForClosing(data)).toEqual([
+      'out/a.txt', 'notes.md', 'broken.txt', 'junk.txt', 'bad-path.txt', 'bad-new.txt', 'bad-old.txt',
+    ])
+    // A non-diff result (the tool chose the generic card), a generic-edit
+    // card, and each malformed diff payload all contribute no hunks at all.
+    expect(data?.history.get('out/a.txt')).toBeUndefined()
+    expect(data?.history.get('notes.md')).toBeUndefined()
+    expect(data?.history.get('broken.txt')).toBeUndefined()
+    expect(data?.history.get('junk.txt')).toBeUndefined()
+    expect(data?.history.get('bad-path.txt')).toBeUndefined()
+    expect(data?.history.get('bad-new.txt')).toBeUndefined()
+    expect(data?.history.get('bad-old.txt')).toBeUndefined()
+  })
+
+  it('accumulates hunks for repeated edits of one path and chains history across turns', () => {
+    const value = assembler([
+      at(1, 'turn/start', { turn: 1 }),
+      call(2, 'first', diff('out/a.txt')),
+      resultView(3, 'first', {
+        for: 'result',
+        view: { card: 'diff', diffs: [{ path: 'out/a.txt', oldText: null, newText: 'one\n' }] },
+      }),
+      at(4, 'turn/end', { turn: 1, reason: { kind: 'completed' } }),
+      at(5, 'turn/start', { turn: 2 }),
+      call(6, 'second', diff('out/a.txt'), 2),
+      resultView(7, 'second', {
+        for: 'result',
+        view: { card: 'diff', diffs: [{ path: 'out/a.txt', oldText: 'one\n', newText: 'two\n' }] },
+      }, 2),
+      call(8, 'third', diff('out/a.txt'), 2),
+      resultView(9, 'third', {
+        for: 'result',
+        view: { card: 'diff', diffs: [{ path: 'out/a.txt', oldText: 'two\n', newText: 'three\nfour\n' }] },
+      }, 2),
+      at(10, 'turn/end', { turn: 2, reason: { kind: 'completed' } }),
+    ])
+    const turn1 = deliverablesOf(value, 1)
+    const turn2 = deliverablesOf(value, 2)
+    expect(turn1?.history.get('out/a.txt')).toEqual([{ oldText: null, newText: 'one\n' }])
+    // Turn 2 chains the conversation history: both its own edits append.
+    expect(turn2?.history.get('out/a.txt')).toEqual([
+      { oldText: null, newText: 'one\n' },
+      { oldText: 'one\n', newText: 'two\n' },
+      { oldText: 'two\n', newText: 'three\nfour\n' },
+    ])
+    expect(producedForClosing(turn2)).toEqual(['out/a.txt'])
+    expect(selectProducedFiles(tailOwner(turn2, 10))).toEqual([
+      { path: 'out/a.txt', hunks: turn2?.history.get('out/a.txt') },
+    ])
+  })
+})
+
+describe('diffStats', () => {
+  it('counts the diff primitive rule: every side line, empty zero, trailing newline a terminator', () => {
+    expect(diffStats([{ oldText: 'a\nb\n', newText: 'x\n' }])).toEqual({ added: 1, removed: 2 })
+    expect(diffStats([{ oldText: null, newText: '' }])).toEqual({ added: 0, removed: 0 })
+    expect(diffStats([{ oldText: 'only', newText: 'a\nb' }])).toEqual({ added: 2, removed: 1 })
+    expect(diffStats([])).toEqual({ added: 0, removed: 0 })
+    expect(diffStats([
+      { oldText: 'x\n', newText: 'y\n' },
+      { oldText: 'z\n', newText: 'w\n' },
+    ])).toEqual({ added: 2, removed: 2 })
+  })
 })
 
 describe('ProducedFiles row', () => {
@@ -308,6 +443,7 @@ describe('ProducedFiles row', () => {
 
   it('keeps one measured line, updates on resize, and opens a file or the workspace folder', () => {
     const paths = ['deep/a.html', 'b.css', 'c.ts', 'd.ts', 'e.ts', 'f.ts', 'g.ts']
+      .map(path => ({ path, hunks: [] }))
     const openFile = vi.fn<(path: string) => void>()
     let available = 226
     let resize: ResizeObserverCallback | undefined
@@ -329,11 +465,14 @@ describe('ProducedFiles row', () => {
       x: 0, y: 0, width, height: 22, top: 0, right: width, bottom: 22, left: 0,
       toJSON: () => ({}),
     })
+    // Probes are chip spans now (name + optional totals + chevron); the
+    // localized remainder probe's text starts with the '+' sign.
     const bounds = vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect')
       .mockImplementation(function getProbeRect(this: HTMLElement) {
         if (this.closest('[aria-hidden="true"]') === null) return rect(0)
-        if (this.tagName !== 'BUTTON') return rect(60)
-        return rect(this.textContent === 'a.html' || this.textContent === 'b.css' ? 50 : 100)
+        const text = this.textContent ?? ''
+        if (text.startsWith('+')) return rect(60)
+        return rect(text === 'a.html' || text === 'b.css' ? 50 : 100)
       })
 
     const view = render(
@@ -381,15 +520,93 @@ describe('ProducedFiles row', () => {
     bounds.mockRestore()
   })
 
-  it('keeps the folder action absent without overflow or a local native opener', () => {
+  it('shows the conversation +/- totals next to the name and expands the change below the row', () => {
     const openFile = vi.fn<(path: string) => void>()
     const view = render(
-      <ProducedFiles matched={['a.md']} openFile={openFile} {...capability(true)} t={t} />,
+      <ProducedFiles
+        matched={[
+          { path: 'out/a.ts', hunks: [{ oldText: 'one\n', newText: 'two\nthree\n' }] },
+          { path: 'out/b.md', hunks: [] },
+        ]}
+        openFile={openFile}
+        {...capability(false)}
+        t={t}
+      />,
     )
-    const overflowing = ['a.md', 'b.md', 'c.md', 'd.md', 'e.md', 'f.md', 'g.md']
+    const row = view.container.querySelector('[data-produced-files-row]')
+    if (!(row instanceof HTMLElement)) throw new Error('produced row missing')
+    // The changed file carries its conversation totals; the hunk-less one
+    // stays a plain chip with no chevron.
+    expect(within(row).getByText('+2')).toBeTruthy()
+    expect(within(row).getByText('-1')).toBeTruthy()
+    expect(within(row).queryByText('+0')).toBeNull()
+    expect(view.queryByRole('button', { name: '展开 out/b.md 的修改内容' })).toBeNull()
+
+    // The name still opens the file; the chevron expands the change.
+    fireEvent.click(view.getByRole('button', { name: '打开 out/a.ts' }))
+    expect(openFile).toHaveBeenCalledWith('out/a.ts')
+    const toggle = view.getByRole('button', { name: '展开 out/a.ts 的修改内容' })
+    expect(toggle.getAttribute('aria-expanded')).toBe('false')
+    fireEvent.click(toggle)
+    const panel = view.container.querySelector('[data-produced-diff]')
+    if (!(panel instanceof HTMLElement)) throw new Error('produced diff panel missing')
+    expect(within(panel).getByText('one')).toBeTruthy()
+    expect(within(panel).getByText('two')).toBeTruthy()
+    expect(within(panel).getByText('three')).toBeTruthy()
+    // The panel is one card: a title bar carries the path (name + dimmed
+    // directory), the totals, and its own collapse control; the primitive's
+    // internal path header and footer stay off inside the panel.
+    expect(within(panel).getByText('a.ts')).toBeTruthy()
+    expect(within(panel).getByText('out')).toBeTruthy()
+    expect(within(panel).getByText('+2')).toBeTruthy()
+    expect(within(panel).getByText('-1')).toBeTruthy()
+    expect(within(panel).queryByText('└ +2 -1 · 1 file')).toBeNull()
+    fireEvent.click(within(panel).getByRole('button', { name: '打开 out/a.ts' }))
+    expect(openFile).toHaveBeenLastCalledWith('out/a.ts')
+    fireEvent.click(within(panel).getByRole('button', { name: '收起修改面板' }))
+    expect(view.container.querySelector('[data-produced-diff]')).toBeNull()
+    // Reopening through the chip: the chip's control still collapses, and the
+    // panel's path header names the expanded file.
+    fireEvent.click(view.getByRole('button', { name: '展开 out/a.ts 的修改内容' }))
+    const collapse = view.getByRole('button', { name: '收起 out/a.ts 的修改内容' })
+    expect(collapse.getAttribute('aria-expanded')).toBe('true')
+    fireEvent.click(collapse)
+    expect(view.container.querySelector('[data-produced-diff]')).toBeNull()
+  })
+
+  it('opens a file by name while another chip stays expanded', () => {
+    const openFile = vi.fn<(path: string) => void>()
+    const view = render(
+      <ProducedFiles
+        matched={[
+          { path: 'a.ts', hunks: [{ oldText: 'x\n', newText: 'y\n' }] },
+          { path: 'b.ts', hunks: [{ oldText: 'u\n', newText: 'v\n' }] },
+        ]}
+        openFile={openFile}
+        {...capability(false)}
+        t={t}
+      />,
+    )
+    fireEvent.click(view.getByRole('button', { name: '展开 a.ts 的修改内容' }))
+    expect(view.container.querySelector('[data-produced-diff]')).not.toBeNull()
+    // Opening a second chip's change moves the single expanded panel.
+    fireEvent.click(view.getByRole('button', { name: '展开 b.ts 的修改内容' }))
+    const panel = view.container.querySelector('[data-produced-diff]')
+    if (!(panel instanceof HTMLElement)) throw new Error('produced diff panel missing')
+    expect(within(panel).getByText('u')).toBeTruthy()
+    expect(within(panel).queryByText('x')).toBeNull()
+  })
+
+  it('keeps the folder action absent without overflow or a local native opener', () => {
+    const openFile = vi.fn<(path: string) => void>()
+    const matches = ['a.md', 'b.md', 'c.md', 'd.md', 'e.md', 'f.md', 'g.md']
+      .map(path => ({ path, hunks: [] }))
+    const view = render(
+      <ProducedFiles matched={[matches[0]!]} openFile={openFile} {...capability(true)} t={t} />,
+    )
     expect(view.queryByRole('button', { name: '在文件夹中显示' })).toBeNull()
     for (const unavailable of [capability(false), capability(true, false), capability(undefined)]) {
-      view.rerender(<ProducedFiles matched={overflowing} openFile={openFile} {...unavailable} t={t} />)
+      view.rerender(<ProducedFiles matched={matches} openFile={openFile} {...unavailable} t={t} />)
       expect(view.queryByRole('button', { name: '在文件夹中显示' })).toBeNull()
     }
   })
@@ -397,7 +614,8 @@ describe('ProducedFiles row', () => {
   it('uses singular English copy when exactly one file is hidden', () => {
     const view = render(
       <ProducedFiles
-        matched={['a.md', 'b.md', 'c.md', 'd.md', 'e.md', 'f.md', 'g.md']}
+        matched={['a.md', 'b.md', 'c.md', 'd.md', 'e.md', 'f.md', 'g.md']
+          .map(path => ({ path, hunks: [] }))}
         openFile={() => {}}
         {...capability(false)}
         t={makeTranslate(en)}
@@ -433,6 +651,8 @@ describe('producedFileMentions resolver', () => {
     expect(resolver.resolve('style.css')).toBeUndefined()
     expect(resolver.resolve('notes.md')).toBeUndefined()
     expect(basename('a\\b\\c.txt')).toBe('c.txt')
+    expect(dirname('a\\b\\c.txt')).toBe('a\\b')
+    expect(dirname('flat.txt')).toBe('')
   })
 })
 
@@ -445,7 +665,7 @@ describe('package shells', () => {
       register: (pkg: string) => { registered.push(pkg); return () => {} },
     } as never)
     const dispose = await applyInvariant(ctx)
-    expect(registered).toEqual(['@deepseek-ai/dsh-client-ui-deliverables'])
+    expect(registered).toEqual(['@deepseek-ai/dsh-client-ui-deliverables-custom'])
     expect(dispose).toBeTypeOf('function')
   })
 })

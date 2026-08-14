@@ -412,11 +412,6 @@ export function apply(ctx: Context): void {
           })
         },
         loadOlder: () => { void scoped.loadOlder() },
-        resend: (text) => {
-          void scoped.send(text).catch(() => {
-            // Send failure surfaces via snapshot.promptError; nothing to restore.
-          })
-        },
         loadImage: attachment => conversation.resolveImage(sessionId, attachment),
         // Unregistered 'trajectory' id is safe: the tab ring falls back to
         // the first view, and the untouched inspect target stays inert.

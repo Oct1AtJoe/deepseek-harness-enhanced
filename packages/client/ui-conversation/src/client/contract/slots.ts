@@ -373,11 +373,6 @@ export interface ChatNodeOwnerProps {
   /** Resolve a session-authorized historical image for inline display. */
   loadImage: (attachment: ImageAttachmentRef) => Promise<string>
   fileMentions: (owner: TurnTailOwnerProps) => MarkdownFileMentions | undefined
-  /**
-   * Re-send the plain text of a user message whose following turn ended in
-   * failure (the 重新发起 action); undefined when the message is not eligible.
-   */
-  onResend?: (() => void) | undefined
 }
 
 /** Full props of one registered keyed Chat business renderer. */
@@ -732,11 +727,6 @@ export interface ChatViewInjected {
    * absent or the turn produced nothing worth linking.
    */
   fileMentions: (owner: TurnTailOwnerProps) => MarkdownFileMentions | undefined
-  /**
-   * Re-send one prompt text as a queued turn (the failed-round 重新发起
-   * action); send failures surface through the session promptError strip.
-   */
-  resend: (text: string) => void
 }
 
 /** Full chat-view component props: runtime & its Tool/command/tail render shares & store & injected & locale seat. */

@@ -1,17 +1,14 @@
 // ProducedFiles: the produced-file row a finished turn ends with. The paths
 // come pre-matched by the turn-tail chain from the mutation tools'
-// follow-along locations, never from the closing prose. Clicking a chip's
-// name goes through the same openFile the tool rows use — the Host's own
-// opener, on the Host machine. A chip whose file this conversation changed
-// carries the +/- line totals next to its name and a chevron that expands
-// the change itself (the same diff primitive the tool rows draw).
+// follow-along locations, never from the closing prose. Clicking one goes
+// through the same openFile the tool rows use — the Host's own opener, on the
+// Host machine.
 
 import { useLayoutEffect, useRef, useState } from 'react'
 import type { HostDescriptionSource } from '@deepseek-ai/dsh-client-connection/client'
 import type { InjectFace, PropsLocale } from '@deepseek-ai/dsh-client-ui-slots'
-import { DiffBlock, IconChevronDownOutline14, IconChevronUpOutline14 } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { TurnTailOwnerProps } from '@deepseek-ai/dsh-client-ui-conversation/client'
-import { basename, diffStats, dirname, type ProducedFileMatch } from './turn-deliverables.ts'
+import { basename } from './turn-deliverables.ts'
 import type { NS } from './locales.ts'
 import css from './ProducedFiles.module.css'
 
@@ -61,68 +58,11 @@ export interface ProducedFilesInjected {
 
 /** Matched paths plus the opener, locale, and injected Host capability. */
 export type ProducedFilesProps = Pick<TurnTailOwnerProps, 'openFile'> & {
-  matched: readonly ProducedFileMatch[]
+  matched: readonly string[]
 } & PropsLocale<typeof NS> & InjectFace<ProducedFilesInjected>
 
 function moreLabel(t: ProducedFilesProps['t'], count: number): string {
   return count === 1 ? t('produced.moreOne') : t('produced.more', { count: String(count) })
-}
-
-/** The `+A -R` badge of one chip's conversation totals. */
-function Stats({ added, removed }: { added: number; removed: number }) {
-  return (
-    <span className={css.stats}>
-      <span className={css.added}>+{added}</span>
-      <span className={css.removed}>-{removed}</span>
-    </span>
-  )
-}
-
-/**
- * The expanded change below the row: one card, a title bar over the diff
- * primitive's body. The bar carries the path (name plus dimmed directory, both
- * ellipsized; like every path in this row it opens the file), the +/- totals,
- * and its own collapse control; the primitive's path headers and footer stay
- * off inside the panel.
- */
-function ChangePanel({ match, openFile, t, close }: {
-  match: ProducedFileMatch
-  openFile: (path: string) => void
-  t: ProducedFilesProps['t']
-  close: () => void
-}) {
-  const stats = diffStats(match.hunks)
-  return (
-    <div className={css.diff} data-produced-diff>
-      <div className={css.diffHeader}>
-        <button
-          type="button"
-          className={css.diffPath}
-          title={match.path}
-          aria-label={t('produced.open', { name: match.path })}
-          onClick={() => { openFile(match.path) }}
-        >
-          <span className={css.diffName}>{basename(match.path)}</span>
-          {dirname(match.path) !== '' && <span className={css.diffDir}>{dirname(match.path)}</span>}
-        </button>
-        <Stats added={stats.added} removed={stats.removed} />
-        <button
-          type="button"
-          className={css.diffCollapse}
-          aria-label={t('produced.collapsePanel')}
-          onClick={close}
-        >
-          <IconChevronUpOutline14 size={12} />
-        </button>
-      </div>
-      <DiffBlock
-        diffs={match.hunks.map(hunk => ({ path: match.path, ...hunk }))}
-        showPathHeaders={false}
-        showFooter={false}
-        className={css.diffBody}
-      />
-    </div>
-  )
 }
 
 /**
@@ -137,9 +77,8 @@ export function ProducedFiles({
   const canOpenPath = isLoopback && hostCanOpenPath
   const limit = Math.min(paths.length, SHOWN_LIMIT)
   const [shownCount, setShownCount] = useState(limit)
-  const [expandedPath, setExpandedPath] = useState<string | null>(null)
   const rowRef = useRef<HTMLDivElement>(null)
-  const chipProbes = useRef<Array<HTMLSpanElement | null>>([])
+  const chipProbes = useRef<Array<HTMLButtonElement | null>>([])
   const moreProbe = useRef<HTMLSpanElement>(null)
 
   useLayoutEffect(() => {
@@ -151,7 +90,7 @@ export function ProducedFiles({
       const styles = getComputedStyle(row)
       const gap = Number.parseFloat(styles.columnGap || styles.gap) || 0
       // React attaches every still-mounted callback ref before layout effects run.
-      const activeChipProbes = chipProbes.current.slice(0, limit) as HTMLSpanElement[]
+      const activeChipProbes = chipProbes.current.slice(0, limit) as HTMLButtonElement[]
       const chips = activeChipProbes.map(probe => probe.getBoundingClientRect().width)
       const more = Array.from({ length: limit + 1 }, (_, candidate) => {
         if (paths.length === candidate) return undefined
@@ -173,86 +112,43 @@ export function ProducedFiles({
   const visibleCount = Math.min(shownCount, limit)
   const shown = paths.slice(0, visibleCount)
   const hidden = paths.length - shown.length
-  const expanded = paths.find(match => match.path === expandedPath) ?? null
-
-  // One chip: the name opens the file; a conversation history adds the +/-
-  // badge and the chevron that expands the change below the row.
-  const chip = (match: ProducedFileMatch) => {
-    const { path, hunks } = match
-    const stats = hunks.length === 0 ? null : diffStats(hunks)
-    const open = expandedPath === path
-    return (
-      <span key={path} className={css.chip}>
-        <button
-          type="button"
-          className={css.file}
-          // The full path is the disambiguator when two turns produce files
-          // that share a basename; the chip itself stays short.
-          title={path}
-          aria-label={t('produced.open', { name: path })}
-          onClick={() => { openFile(path) }}
-        >
-          {basename(path)}
-        </button>
-        {stats !== null && (
-          <>
-            <Stats added={stats.added} removed={stats.removed} />
-            <button
-              type="button"
-              className={css.toggle}
-              aria-expanded={open}
-              aria-label={t(open ? 'produced.collapse' : 'produced.expand', { name: path })}
-              onClick={() => { setExpandedPath(open ? null : path) }}
-            >
-              {open ? <IconChevronUpOutline14 size={12} /> : <IconChevronDownOutline14 size={12} />}
-            </button>
-          </>
-        )}
-      </span>
-    )
-  }
-
   return (
     <div className={css.root}>
       <span className={css.label}>{t('produced.label')}</span>
       <div ref={rowRef} className={css.row} data-produced-files-row>
-        {shown.map(chip)}
+        {shown.map(path => (
+          <button
+            key={path}
+            type="button"
+            className={css.file}
+            // The full path is the disambiguator when two turns produce files
+            // that share a basename; the chip itself stays short.
+            title={path}
+            aria-label={t('produced.open', { name: path })}
+            onClick={() => { openFile(path) }}
+          >
+            {basename(path)}
+          </button>
+        ))}
         {hidden > 0 && <span className={css.more}>{moreLabel(t, hidden)}</span>}
       </div>
-      {expanded !== null && expanded.hunks.length > 0 && (
-        <ChangePanel
-          match={expanded}
-          openFile={openFile}
-          t={t}
-          close={() => { setExpandedPath(null) }}
-        />
-      )}
       {hidden > 0 && canOpenPath && (
         <button type="button" className={css.showFolder} onClick={() => { openFile('.') }}>
           {t('produced.showInFolder')}
         </button>
       )}
       <div className={css.measure} aria-hidden="true">
-        {paths.slice(0, limit).map((match, index) => {
-          const stats = diffStats(match.hunks)
-          return (
-            <span
-              key={match.path}
-              ref={(node) => { chipProbes.current[index] = node }}
-              className={`${css.chip} ${css.probe}`}
-            >
-              <button type="button" tabIndex={-1} className={css.file}>
-                {basename(match.path)}
-              </button>
-              {match.hunks.length > 0 && (
-                <>
-                  <Stats added={stats.added} removed={stats.removed} />
-                  <span className={css.toggle}><IconChevronDownOutline14 size={12} /></span>
-                </>
-              )}
-            </span>
-          )
-        })}
+        {paths.slice(0, limit).map((path, index) => (
+          <button
+            key={path}
+            ref={(node) => { chipProbes.current[index] = node }}
+            type="button"
+            tabIndex={-1}
+            className={`${css.file} ${css.probe}`}
+          >
+            {basename(path)}
+          </button>
+        ))}
         <span ref={moreProbe} className={`${css.more} ${css.probe}`} />
       </div>
     </div>

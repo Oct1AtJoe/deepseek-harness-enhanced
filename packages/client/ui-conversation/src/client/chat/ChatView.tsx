@@ -12,8 +12,8 @@
 // ChatNodeSeat subscribes to one Node key, so Assistant deltas and Tool
 // lifecycle updates replace only their own row without remounting it.
 
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
-import type { ChatSnapshot, ConversationTimelineSnapshot } from '@deepseek-ai/dsh-client-runtime/client'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import type { ConversationTimelineSnapshot } from '@deepseek-ai/dsh-client-runtime/client'
 import { IconChevronDownOutline14 } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { ChatViewSlotProps } from '../contract/slots.ts'
 import { PendingSteeringBubble } from './MessageItem.tsx'
@@ -103,37 +103,6 @@ function runningTurnStartTime(timeline: ConversationTimelineSnapshot): number | 
   return latest
 }
 
-/**
- * Resend target of a failed round: the last user message whose following turn
- * ended terminally (turn-error or max-tokens), with no newer user message
- * after it. Null when the tail is healthy, the session is running, or no user
- * message exists. Re-sends the message's plain text (images are not replayed).
- */
-function failedRoundTarget(
-  order: readonly string[],
-  nodeStore: ChatSnapshot['nodes'],
-  running: boolean,
-): { key: string; text: string } | null {
-  if (running) return null
-  let lastUser: { key: string; text: string } | null = null
-  let failed = false
-  for (const key of order) {
-    const node = nodeStore.get(key)
-    if (node?.kind === 'user') {
-      let text = ''
-      const content = (node.data as { content: readonly { type?: string; text?: string }[] }).content
-      for (const block of content) {
-        if (block.type === 'text' && typeof block.text === 'string') text += block.text
-      }
-      lastUser = { key, text }
-      failed = false
-    } else if (node?.kind === 'turn-error' || node?.kind === 'turn-max-tokens') {
-      failed = true
-    }
-  }
-  return lastUser !== null && failed ? lastUser : null
-}
-
 /** Turn-level model activity label retained across first-token, tool, and streaming phases. */
 function TurnStatus({ startTime, t }: {
   /** The running turn's logged `turn/start` time; null falls back to mount
@@ -176,7 +145,7 @@ function TurnStatus({ startTime, t }: {
  */
 export function ChatView({
   useSession, useSessions, useStore, renderSlot, sessionId, openFile, loadOlder, loadImage, inspectCall, chatScroll, forkAt,
-  fileMentions, resend, t,
+  fileMentions, t,
 }: ChatViewSlotProps) {
   const order = useSession(s => s.chat.order)
   const nodeStore = useSession(s => s.chat.nodes)
@@ -196,16 +165,6 @@ export function ChatView({
     [inbox],
   )
   const runningTurnStart = useMemo(() => runningTurnStartTime(timeline), [timeline])
-  // Failed-round resend target rides order (stable except on row enter/leave),
-  // so content deltas never recompute it.
-  const resendTarget = useMemo(
-    () => failedRoundTarget(order, nodeStore, running),
-    [order, nodeStore, running],
-  )
-  const onResendFor = useCallback((nodeKey: string): (() => void) | undefined => {
-    if (resendTarget === null || nodeKey !== resendTarget.key) return undefined
-    return () => { resend(resendTarget.text) }
-  }, [resendTarget, resend])
 
   const listRef = useRef<HTMLDivElement | null>(null)
   const columnRef = useRef<HTMLDivElement | null>(null)
@@ -432,7 +391,6 @@ export function ChatView({
               forkAt={forkAt}
               loadImage={loadImage}
               fileMentions={fileMentions}
-              onResend={onResendFor(nodeKey)}
               renderSlot={renderSlot}
               t={t}
             />
