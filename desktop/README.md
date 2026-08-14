@@ -1,5 +1,7 @@
 # dsh-desktop
 
+English | [中文](README.zh.md)
+
 An Electron shell that runs the DeepSeek Harness Web GUI (`dsh web`) as a
 native desktop app. It is a standalone package (not a pnpm workspace member)
 so the heavy Electron toolchain stays out of the repository's install and

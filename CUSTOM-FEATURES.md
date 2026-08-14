@@ -21,6 +21,8 @@
 
 **同步流程**：`powershell -File scripts/upstream-sync.ps1`（下载官方 tarball → upstream-master 追加快照 → merge 进 master）。冲突只可能出现在上表"升级冲突面"非零的官方包文件，按各节重放步骤手工解决。
 
+**根 README 已换位**（2026-08-14）：`README.md` 现在是中文（GitHub 默认渲染），英文在 `README.en.md`。上游同步必然在 `README.md`（上游英文 vs 本分支中文）与 `README.zh.md`（上游文件 vs 本分支已删除）上产生冲突：保留本分支中文 `README.md`，英文侧若有上游更新则合并进 `README.en.md`。根 README 已从翻译配对门禁排除（见 docs/i18n/README.md 排除清单），双语同步由手工维护。
+
 ---
 
 ## 1. per-model 思考程度记忆（effort memory）

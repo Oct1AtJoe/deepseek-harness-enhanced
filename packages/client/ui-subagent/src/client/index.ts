@@ -14,12 +14,12 @@
 import type {
   ClientContext, SessionId, SubagentAddress,
 } from '@deepseek-ai/dsh-client-runtime/client'
-import type { ComposerChainProps } from '@deepseek-ai/dsh-client-ui-conversation/client'
+import type { ComposerChainProps, IConversation } from '@deepseek-ai/dsh-client-ui-conversation/client'
 import type { ClientSessionContext, InputTriggerServiceContract, InputTriggerSource } from '@deepseek-ai/dsh-client-ui-input-trigger/client'
 import {
   SubagentCatalogAction, type SubagentCatalogInjected,
 } from './SubagentCatalogAction.tsx'
-import { SubagentComposerAction, SUBAGENT_VIEW_ID } from './SubagentComposerAction.tsx'
+import { SubagentComposerAction, SUBAGENT_VIEW_ID, type SubagentComposerInjected } from './SubagentComposerAction.tsx'
 import { SubagentWorkView, type SubagentWorkViewInjected } from './SubagentWorkView.tsx'
 import {
   SubagentReadOnlyComposer, type SubagentReadOnlyMatch,
@@ -38,7 +38,7 @@ export type {
   SubagentCatalogActionProps, SubagentCatalogInjected,
 } from './SubagentCatalogAction.tsx'
 export type {
-  SubagentComposerActionProps,
+  SubagentComposerActionProps, SubagentComposerInjected,
 } from './SubagentComposerAction.tsx'
 export { SUBAGENT_VIEW_ID } from './SubagentComposerAction.tsx'
 export type {
@@ -158,9 +158,19 @@ export function apply(ctx: ClientContext): void {
       },
     }),
   }, SubagentWorkView))
-  // The composer tool-row seat, right of the access-mode control.
-  ctx.slots.inject('conversation.input.subagent', () => ctx.slots.register({
-    name: 'conversation.input.subagent',
+  // The composer tool-row button, next to the send button (official
+  // conversation.input.right list seat). View switching rides the
+  // conversation service's per-session view-ring switcher.
+  ctx.slots.inject('conversation.input.right', () => ctx.slots.register({
+    name: 'conversation.input.right',
+    id: 'subagent-activity',
+    order: 10,
     locale: NS,
+    inject: (sessionId: SessionId): SubagentComposerInjected => {
+      const conversation = ctx.sessions.scope(sessionId)?.get('conversation') as IConversation | undefined
+      return {
+        setView: (view) => { if (conversation !== undefined) conversation.setView(sessionId, view) },
+      }
+    },
   }, SubagentComposerAction))
 }

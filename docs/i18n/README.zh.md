@@ -52,8 +52,9 @@
 - `docs/i18n/terminology.md` 与 [style-samples.md](style-samples.md)：二者本身即为中英对照文档。
 - [translation-prompt.md](translation-prompt.md)：自动翻译流水线的提示词模板；正文逐字进入模型请求，配对翻译会改变流水线行为。
 - `.agents/notes/archived/`：冻结的历史三文件配对。[`verify-archived-agent-notes`](../../scripts/verify-archived-agent-notes.ts) 校验其完整性和内容封存记录；翻译维护绝不能重写这些文件。
+- 根目录 `README.md` 与 `README.en.md`：增强分支的门面文档。GitHub 只渲染根目录 `README.md`，因此中文侧占用该文件名，英文对侧使用 `README.en.md`，落在本机制 `.zh.md` 约定之外；该配对仍保持双语并手工维护，切换行为 `[English](README.en.md) | 中文` 与 `English | [中文](README.md)`。
 
-**统一要求**：当前及今后纳入范围的每篇文档，合并时都必须构成完整的双语配对。[scripts/translation-pairing.manifest.json](../../scripts/translation-pairing.manifest.json) 只包含显式排除项；不存在逐文件推进清单、日期分界或 README 专用政策类别。
+**统一要求**：当前及今后纳入范围的每篇文档，合并时都必须构成完整的双语配对。[scripts/translation-pairing.manifest.json](../../scripts/translation-pairing.manifest.json) 只包含显式排除项；不存在逐文件推进清单、日期分界或 README 专用政策类别，唯一例外是上文列出的根 README 配对。
 
 ## 分工
 

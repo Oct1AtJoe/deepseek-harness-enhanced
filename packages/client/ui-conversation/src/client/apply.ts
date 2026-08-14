@@ -288,7 +288,6 @@ export function apply(ctx: Context): void {
     // register.
     children: {
       'conversation.input.plan': { kind: 'single', scope: 'session' },
-      'conversation.input.subagent': { kind: 'single', scope: 'session' },
       'conversation.input.model': { kind: 'single', scope: 'session' },
     },
     inject: (sessionId: SessionId | undefined): ComposerBarInjected => {
@@ -303,7 +302,6 @@ export function apply(ctx: Context): void {
           toggleCommandMenu: undefined,
           stop: undefined,
           command: undefined,
-          setView: () => {},
           hooks: { notices: ABSENT_NOTICES, lexicon: ABSENT_LEXICON, menuLauncher: ABSENT_MENU_LAUNCHER },
         }
       }
@@ -312,11 +310,6 @@ export function apply(ctx: Context): void {
       const inputTriggers = inputHub.inputTriggers(sessionId)
       return {
         keyboard: shell,
-        // The session body's registration keeps the baked chat-store setView
-        // in the conversation service; the tool-row seats (subagent-activity)
-        // switch the view ring through it. No-op while the body has not
-        // registered (a session the composer outlives) — the tabs stay put.
-        setView: (view) => { conversation.setView(sessionId, view) },
         addImages: (files) => {
           try {
             const images = conversation.createDraftImages(files)

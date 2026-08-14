@@ -1,54 +1,54 @@
 # DeepSeek Harness Enhanced
 
-English | [中文](README.zh.md)
+[English](README.en.md) | 中文
 
-> **Local enhanced fork.** This checkout is official [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) master (snapshot `47f94385`, 2026-08-13) plus local customizations added on 2026-08-14. The feature checklist, replay steps, and merge-conflict guide live in [CUSTOM-FEATURES.md](CUSTOM-FEATURES.md). Remote: https://github.com/Oct1AtJoe/deepseek-harness-enhanced
+> **本地增强分支。** 本检出为官方 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) master（快照 `47f94385`，2026-08-13）叠加 2026-08-14 加入的本地定制。功能清单、重放步骤与合并冲突指引见 [CUSTOM-FEATURES.md](CUSTOM-FEATURES.md)。远程仓库：https://github.com/Oct1AtJoe/deepseek-harness-enhanced
 
-DeepSeek Harness (`dsh`) is an open-source agent harness developed by [DeepSeek AI](https://deepseek.com).
+DeepSeek Harness（`dsh`）是由 [DeepSeek AI](https://deepseek.com) 开发的开源 agent harness（智能体框架）。
 
-It uses an architecture where **everything is a plugin**, and is powered by [Cordis](https://github.com/cordiverse/cordis), whose design is described in [_A Programming Paradigm for Spatiotemporal Composability_](https://github.com/cordiverse/paper).
+它采用**一切皆插件**的架构，并由 [Cordis](https://github.com/cordiverse/cordis) 驱动，其设计参见论文 [_A Programming Paradigm for Spatiotemporal Composability_](https://github.com/cordiverse/paper)。
 
-## Local enhancements (2026-08-14)
+## 本地增强（2026-08-14）
 
-Custom features on top of official master. Plugin-extracted features merge cleanly on upstream sync; the rest are small in-package changes replayed per [CUSTOM-FEATURES.md](CUSTOM-FEATURES.md):
+在官方 master 之上的定制功能。已插件化的功能在上游同步时零冲突；其余为包内小改动，按 [CUSTOM-FEATURES.md](CUSTOM-FEATURES.md) 重放：
 
-- **Per-model effort memory** — switching models no longer resets the reasoning effort to the adapter default; new sessions inherit the remembered effort.
-- **Failed-round re-run button** — a refresh action on a failed assistant reply re-sends the round's text (`@deepseek-ai/dsh-client-ui-resend-failed-round` plugin).
-- **Image sending enabled** — the deepseek adapter no longer rejects image content.
-- **Subagent tab + counter** — a subagent work view tab and a composer button with a live running-count badge.
-- **Cross-workspace session reference** — `@`-triggered session candidates and injected referenced-session context (`ui-session-reference` plugin).
-- **Produced-files diff stats** — file chips show `+N -M` and expand the round's changes (`@deepseek-ai/dsh-client-ui-deliverables-custom` fork).
-- **aurora / nebula themes** — tech-style themes with glow, plus rounded pixel-style buttons.
-- **Desktop shell** — an Electron wrapper (`desktop/`) that spawns or attaches to `dsh web`.
+- **per-model 思考程度记忆** — 切换模型不再把思考程度重置为适配器默认；新会话继承记忆。
+- **失败轮重发按钮** — 失败的助手回复旁新增刷新动作，一键重发该轮文本（`@deepseek-ai/dsh-client-ui-resend-failed-round` 插件）。
+- **图片发送开放** — deepseek 适配器不再拒绝图片内容。
+- **子智能体 tab 与计数** — 子智能体工作视图 tab + 输入区带运行数量徽标的按钮。
+- **跨工作区会话引用** — `@` 触发会话候选与注入的引用会话上下文（`ui-session-reference` 插件）。
+- **产物文件 diff 统计** — 文件 chip 显示 `+N -M` 并可展开本轮改动（`@deepseek-ai/dsh-client-ui-deliverables-custom` fork）。
+- **aurora / nebula 主题** — 带光晕的科技风主题与圆角像素风按钮。
+- **桌面壳** — Electron 封装（`desktop/`），启动或挂接 `dsh web`。
 
-### Syncing upstream
+### 同步上游
 
 ```powershell
 powershell -File scripts/upstream-sync.ps1
 git push origin master
 ```
 
-The script downloads the official master tarball, commits it onto the `upstream-master` mirror line, and merges it into `master`. Conflicts are limited to the in-package customization points listed in CUSTOM-FEATURES.md.
+脚本下载官方 master tarball，提交到 `upstream-master` 镜像线，再合并进 `master`。冲突仅限 CUSTOM-FEATURES.md 中列出的包内定制点。
 
-## Developer preview
+## 开发者预览
 
-DeepSeek Harness is currently in _developer preview_ and is iterating rapidly. **THERE WILL BE COMPATIBILITY-BREAKING CHANGES.**
+DeepSeek Harness 目前处于 _开发者预览_ 阶段，正在快速迭代。**未来将出现破坏兼容性的变更。**
 
-## Run
+## 运行
 
-### Run from `npm`
+### 通过 `npm` 运行
 
-Install `Node.js`, then run:
+安装 `Node.js`，然后运行：
 
 ```sh
 npx @deepseek-ai/dsh web
 ```
 
-The command starts the Web UI, served at `http://127.0.0.1:3080` by default. See [Web UI guide](docs/user/guide/index.md).
+该命令会启动 Web UI，默认地址为 `http://127.0.0.1:3080`。详见 [Web UI 指南](docs/user/guide/index.md)。
 
-### Run from source
+### 从源码运行
 
-To run from a repository checkout:
+如需从仓库源码运行：
 
 ```sh
 git clone https://github.com/Oct1AtJoe/deepseek-harness-enhanced.git
@@ -58,24 +58,41 @@ pnpm run build
 pnpm dsh web
 ```
 
-## Community and support
+## 社区与支持
 
-- Feel free to submit feedback or bug reports through [GitHub Discussions](https://github.com/deepseek-ai/deepseek-harness/discussions).
-- Add the [`dsh-plugin`](https://github.com/topics/dsh-plugin) topic to your plugin repository for discoverability.
-- Join <a href="https://discord.gg/Ycq5dCaS4">DeepSeek Harness Discord community</a>.
+- 欢迎通过 [GitHub Discussions](https://github.com/deepseek-ai/deepseek-harness/discussions) 提交反馈或 bug 报告。
+- 为你的插件仓库添加 [`dsh-plugin`](https://github.com/topics/dsh-plugin) 话题，便于被发现。
+- 欢迎加入 DeepSeek Harness 企微群：扫码添加企微小助手并填写入群问卷，完成后小助手会邀请你入群。
 
-## Contributing
+<table>
+  <thead>
+    <tr>
+      <th align="center">企微小助手</th>
+      <th align="center">入群问卷</th>
+      <th align="center">微信公众号</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td align="center"><img src="assets/community-wecom-assistant.png" alt="DeepSeek Harness 企微小助手二维码" width="180" height="180"></td>
+      <td align="center"><a href="https://trtgsjkv6r.feishu.cn/share/base/form/shrcnIt5twSVdLGD52KJBckGCgg"><img src="assets/community-wecom-survey.png" alt="DeepSeek Harness 入群问卷二维码" width="180" height="180"></a></td>
+      <td align="center"><img src="assets/community-wechat-official-account.png" alt="DeepSeek Harness 团队微信公众号二维码" width="180" height="180"></td>
+    </tr>
+  </tbody>
+</table>
 
-See [CONTRIBUTING.md](CONTRIBUTING.md).
+## 参与贡献
 
-## Development
+参见 [CONTRIBUTING.md](CONTRIBUTING.md)。
 
-Start with the [development guide](docs/development.md) and [architecture documentation](docs/architecture.md).
+## 开发
 
-For agents, follow [AGENTS.md](AGENTS.md).
+请先阅读[开发指南](docs/development.md)与[架构文档](docs/architecture.md)。
 
-## License
+面向 agent：请遵循 [AGENTS.md](AGENTS.md)。
+
+## 许可证
 
 [MIT](LICENSE)
 
-Third-party dependencies and their licenses are disclosed in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+第三方依赖及其许可证见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。

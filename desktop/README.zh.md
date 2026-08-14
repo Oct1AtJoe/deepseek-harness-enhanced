@@ -1,5 +1,7 @@
 # dsh-desktop
 
+[English](README.md) | 中文
+
 把 DeepSeek Harness 网页端(`dsh web`)包成桌面应用的 Electron 壳子。它是独立
 包(不属于 pnpm workspace),这样 Electron 这套重依赖不会进仓库的安装和门禁。
 

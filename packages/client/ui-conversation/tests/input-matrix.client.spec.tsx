@@ -64,7 +64,6 @@ function mountBar(shell: SessionInputShell, over?: { running?: boolean; disabled
     // Mirrors the real lookup chain (conversation namespace, then common).
     t: makeTranslate(zh, commonZh),
     variant: 'composer',
-    setView: vi.fn(),
   }
   return render(<InputBar {...props} />)
 }

@@ -52,8 +52,9 @@ Generated English references and graphs participate in pairing when a reviewed C
 - `docs/i18n/terminology.md` and [style-samples.md](style-samples.md) — both are bilingual by construction.
 - [translation-prompt.md](translation-prompt.md) — the automated pipeline's prompt template; its body is machine-consumed verbatim, so a paired translation would change pipeline behavior.
 - `.agents/notes/archived/` — frozen historical triplets. [`verify-archived-agent-notes`](../../scripts/verify-archived-agent-notes.ts) validates their completeness and content seals; translation maintenance must never rewrite them.
+- Root `README.md` and `README.en.md` — the enhanced fork's front page. GitHub renders only the root `README.md`, so the Chinese side holds that filename and the English counterpart the `README.en.md` name, outside this machinery's `.zh.md` convention; the pair stays bilingual and is maintained manually, with switchers `[English](README.en.md) | 中文` and `English | [中文](README.md)`.
 
-**Universal requirement**: every current or future document in scope must merge as a complete bilingual pair. [scripts/translation-pairing.manifest.json](../../scripts/translation-pairing.manifest.json) contains only explicit exclusions; there is no per-file rollout list, date cutoff, or README-specific policy class.
+**Universal requirement**: every current or future document in scope must merge as a complete bilingual pair. [scripts/translation-pairing.manifest.json](../../scripts/translation-pairing.manifest.json) contains only explicit exclusions; there is no per-file rollout list, date cutoff, or README-specific policy class apart from the root README pair listed above.
 
 ## Division of labor
 
