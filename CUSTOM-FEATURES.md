@@ -4,6 +4,23 @@
 
 重放顺序建议：按"核心层 → UI 层"执行；每步后跑对应包测试（`pnpm run test:gui` / `pnpm --filter <pkg> test`）与 `pnpm run typecheck`。
 
+## 插件化迁移状态（2026-08-14 晚）
+
+| 功能 | 状态 | 升级冲突面 |
+|---|---|---|
+| 1. per-model 思考程度记忆 | **留在官方包内**（agent-default-model + apiproxy） | 中（~110 行） |
+| 2. 对话失败重试按钮 | **已插件化**：`ui-resend-failed-round` 新包挂官方 `assistant-actions` 操作条 | 零（ui-conversation 已还原官方；注意按钮位置移到**助手回复**操作条） |
+| 3. 移除图片发送限制 | **留在官方包内**（llm-deepseek serialize/adapter） | 小（~79 行） |
+| 4. 子智能体 tab + 计数按钮 | **组件部分已插件**（ui-subagent 包内新文件，零冲突）；ui-conversation 的席位注册点仍在官方包内 | 小（~90 行，席位声明/apply） |
+| 5. 引用其他工作区会话 | **插件姿势**（新包 ui-session-reference + apiproxy RPC）；挂载行已移到 profile patch | apiproxy RPC 部分（~120 行） |
+| 6. 产物 +N -M 统计 + 展开 | **已插件化**：fork 为 `ui-deliverables-custom`，官方行禁用 | 零（官方 ui-deliverables 已还原） |
+| 7. 展开面板重设计 | **已插件化**（随 6 一起在 custom 包）；DiffBlock 的两个可选 prop 仍在官方 ui-primitives | 小（~32 行 DiffBlock props） |
+| 8. aurora/nebula 主题 | 主题定义文件免疫（ui-theme 内新文件）；注册点仍在官方包内 | 小（~50 行注册 + ~40 行 Button.css） |
+
+**挂载配置**（用户级，不在 git 内）：`~/.dsh/profiles/web/cordis.patch.yml` 持有全部本地行——禁用官方 `ui-deliverables`、insert `ui-deliverables-custom`、`ui-resend-failed-round`、`session-reference`、`ui-session-reference`、`tool-subagent-vision`。官方更新 web-app patch 不再冲突。
+
+**同步流程**：`powershell -File scripts/upstream-sync.ps1`（下载官方 tarball → upstream-master 追加快照 → merge 进 master）。冲突只可能出现在上表"升级冲突面"非零的官方包文件，按各节重放步骤手工解决。
+
 ---
 
 ## 1. per-model 思考程度记忆（effort memory）
