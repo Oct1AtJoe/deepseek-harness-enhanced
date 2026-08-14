@@ -177,7 +177,9 @@ function assembler(entries: readonly ConversationEventInput[], hasMore = false):
 
 function deliverablesOf(value: ConversationNodeAssembler, turn = 1): Readonly<DeliverablesTurnData> | undefined {
   const snapshot = value.snapshot('test') as TimelineSnapshot
-  return snapshot.timeline.turns.get(turn)?.data.get('deliverables')
+  // The official ui-deliverables package also declares the 'deliverables'
+  // projection key; this fork's richer type wins through the explicit cast.
+  return snapshot.timeline.turns.get(turn)?.data.get('deliverables') as Readonly<DeliverablesTurnData> | undefined
 }
 
 describe('produced-file Turn data', () => {

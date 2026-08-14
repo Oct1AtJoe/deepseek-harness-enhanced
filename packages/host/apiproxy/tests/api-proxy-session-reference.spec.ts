@@ -11,9 +11,10 @@ import { Context } from '@deepseek-ai/cordis'
 import AgentRegistry from '@deepseek-ai/dsh-agent'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import LlmRuntime, { LlmAdapter } from '@deepseek-ai/dsh-llm'
-import type { LlmModelInfo, LlmProviderInfo, UserMessage } from '@deepseek-ai/dsh-llm'
+import type { LlmModelInfo, LlmProviderInfo, StreamChunk, UserMessage } from '@deepseek-ai/dsh-llm'
 import SessionStore from '@deepseek-ai/dsh-session'
 import type { SessionId } from '@deepseek-ai/dsh-session'
+import { SessionId as SessionIdBrand } from '@deepseek-ai/dsh-session'
 import SystemPrompt from '@deepseek-ai/dsh-system-prompt'
 import UserQuestionService from '@deepseek-ai/dsh-user-questions'
 import {
@@ -36,6 +37,10 @@ class Adapter extends LlmAdapter {
 
   override listModels(): Promise<readonly LlmModelInfo[]> {
     return Promise.resolve([])
+  }
+
+  override stream(): AsyncIterable<StreamChunk> {
+    return (async function* () { })()
   }
 }
 
@@ -72,12 +77,12 @@ async function harness(): Promise<{
   return { ctx, agent, sessionId: session.id, followup, steer, inject }
 }
 
-const mention = (id: string, label: string): string => `@[${label}](${encodeSessionReferenceUri(id)})`
+const mention = (id: string, label: string): string => `@[${label}](${encodeSessionReferenceUri(SessionIdBrand(id))})`
 
 describe('session.referenceCandidates', () => {
   it('lists resolver candidates for the session agent', async () => {
     const { ctx, sessionId } = await harness()
-    const listCandidates = vi.fn(() => Promise.resolve([
+    const listCandidates = vi.fn((_sessionId: SessionId, _query: string, _limit: number) => Promise.resolve([
       { sessionId: 'session-other', label: 'Other work', cwd: '/other', createdAt: 1 },
     ]))
     ctx.provide('sessionReferenceResolver', { listCandidates } as never)
@@ -118,7 +123,7 @@ describe('session.prompt mention normalization', () => {
       source: { kind: 'session-reference', form: 'recall', version: 1, references: [] },
       content: [{ type: 'text', text: '## Referenced sessions\n...' }],
     } as unknown as UserMessage
-    const prepare = vi.fn(() => Promise.resolve({
+    const prepare = vi.fn((_sessionId: SessionId, _content: unknown, _references: unknown) => Promise.resolve({
       content: [{ type: 'text', text: '看下 @Other 的内容' }],
       additionalContext: context,
     }))

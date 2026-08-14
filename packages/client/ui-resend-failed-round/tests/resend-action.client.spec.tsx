@@ -16,7 +16,7 @@ afterEach(cleanup)
 const mid = (id: string): MessageId => id as MessageId
 
 const nodeMap = (entries: ReadonlyArray<readonly [string, object]>): ChatSnapshot['nodes'] =>
-  new Map(entries.map(([k, v]) => [k, v])) as ChatSnapshot['nodes']
+  new Map(entries.map(([k, v]) => [k, v])) as unknown as ChatSnapshot['nodes']
 
 const snapshot = (
   order: readonly string[],
