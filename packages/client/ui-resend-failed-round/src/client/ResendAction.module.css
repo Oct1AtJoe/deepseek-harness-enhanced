@@ -1,21 +1,23 @@
-/* The re-run button mirrors the shared message IconActions chrome so the
-   strip reads as one row. */
+/* The failed-round re-run button in the turn-tail zone: a quiet text row
+   that reads as part of the tail chrome. */
 
-.action {
+.button {
   display: inline-flex;
   align-items: center;
-  justify-content: center;
-  width: 28px;
-  height: 28px;
-  padding: 6px;
-  border: none;
-  border-radius: 28px;
+  gap: 5px;
+  height: 24px;
+  padding: 0 10px;
+  border: 1px solid var(--dsw-alias-border-secondary);
+  border-radius: 12px;
   background: transparent;
   color: var(--dsw-alias-label-tertiary);
+  font-size: 12px;
+  line-height: 24px;
   cursor: pointer;
 }
 
-.action:hover {
+.button:hover {
   background: var(--dsw-alias-interactive-bg-hover);
   color: var(--dsw-alias-label-secondary);
+  border-color: var(--dsw-alias-border-primary);
 }

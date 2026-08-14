@@ -40,6 +40,7 @@ worktrees/
 .agents/worktrees/
 .typert-*/
 test-out.txt
+logs/
 
 # Compiled artifacts mistakenly emitted into src/ by a one-off build (tsc ran
 # with the source tree as rootDir); the .ts sources are the tracked originals.
