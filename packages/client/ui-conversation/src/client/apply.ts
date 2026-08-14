@@ -242,8 +242,13 @@ export function apply(ctx: Context): void {
       'conversation.view': { kind: 'list', scope: 'session' },
     },
     store: chatStore,
-    inject: (sessionId: SessionId, _actions: BoundActions<typeof chatStore>): ConversationSessionInjected => {
+    inject: (sessionId: SessionId, actions: BoundActions<typeof chatStore>): ConversationSessionInjected => {
       const conversation = concreteConversation(ctx)
+      // The view-ring switch the composer's tool-row seats reach through the
+      // conversation service (the bar holds no store seat; this registration
+      // does). Idempotent per render, stale only for sessions that stopped
+      // rendering — which can no longer be clicked for.
+      conversation.registerViewSwitcher(sessionId, actions.setView)
       return {
         views,
         releaseSessionImages: (id) => { conversation.releaseSessionImages(id) },
@@ -283,6 +288,7 @@ export function apply(ctx: Context): void {
     // register.
     children: {
       'conversation.input.plan': { kind: 'single', scope: 'session' },
+      'conversation.input.subagent': { kind: 'single', scope: 'session' },
       'conversation.input.model': { kind: 'single', scope: 'session' },
     },
     inject: (sessionId: SessionId | undefined): ComposerBarInjected => {
@@ -297,6 +303,7 @@ export function apply(ctx: Context): void {
           toggleCommandMenu: undefined,
           stop: undefined,
           command: undefined,
+          setView: () => {},
           hooks: { notices: ABSENT_NOTICES, lexicon: ABSENT_LEXICON, menuLauncher: ABSENT_MENU_LAUNCHER },
         }
       }
@@ -305,6 +312,11 @@ export function apply(ctx: Context): void {
       const inputTriggers = inputHub.inputTriggers(sessionId)
       return {
         keyboard: shell,
+        // The session body's registration keeps the baked chat-store setView
+        // in the conversation service; the tool-row seats (subagent-activity)
+        // switch the view ring through it. No-op while the body has not
+        // registered (a session the composer outlives) — the tabs stay put.
+        setView: (view) => { conversation.setView(sessionId, view) },
         addImages: (files) => {
           try {
             const images = conversation.createDraftImages(files)
@@ -400,6 +412,11 @@ export function apply(ctx: Context): void {
           })
         },
         loadOlder: () => { void scoped.loadOlder() },
+        resend: (text) => {
+          void scoped.send(text).catch(() => {
+            // Send failure surfaces via snapshot.promptError; nothing to restore.
+          })
+        },
         loadImage: attachment => conversation.resolveImage(sessionId, attachment),
         // Unregistered 'trajectory' id is safe: the tab ring falls back to
         // the first view, and the untouched inspect target stays inert.

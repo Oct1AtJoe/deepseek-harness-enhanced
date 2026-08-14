@@ -380,7 +380,11 @@
 
 /* Primary send (figma IconButton 34:10465): 34px circle, #3964FE light /
    #679EFE dark — the info-fill pair (500→400), NOT button-primary (ink);
-   white glyph; empty text = 0.4 opacity. */
+   white glyph; empty text = 0.4 opacity. Tech themes overlay a gradient
+   (--dsw-alias-button-info-bg), square the circle off via the shared radius
+   token, and ride the shared glow/press effect tokens; the fill color stays
+   as the underlay so the base palettes keep the flat circle. `background-image`
+   sits after the `background` shorthand because the shorthand resets it. */
 .primary {
   display: grid;
   place-items: center;
@@ -388,21 +392,34 @@
   width: 34px;
   height: 34px;
   border: none;
-  border-radius: 999px;
+  border-radius: var(--dsw-alias-button-radius, 999px);
   background: var(--dsw-alias-button-info-fill);
+  background-image: var(--dsw-alias-button-info-bg, none);
+  background-size: var(--dsw-alias-button-primary-bg-size, auto);
   /* Static white, not the foreground token: the arrow stays white on the blue
      fill in both themes (design 34:10465). */
   color: #fff;
+  box-shadow: var(--dsw-alias-button-glow, none);
+  animation: var(--dsw-alias-button-primary-motion, none);
   cursor: pointer;
-  transition: background-color 100ms ease;
+  transition: background-color 100ms ease, box-shadow 100ms ease;
   /* Opts out of the row's 2px downward shift (.row top pad): the send circle
      keeps its original seat while the smaller chips sit lower. Transform, not
-     margin, so flex centering math is untouched. */
-  transform: translateY(-2px);
+     margin, so flex centering math is untouched. Tech themes override the
+     whole transform through the shift tokens, so the -2px seat survives the
+     pixel press. */
+  transform: var(--dsw-alias-button-send-shift, translateY(-2px));
 }
 
 .primary:hover:not(:disabled) {
-  background: var(--dsw-alias-button-info-hover);
+  /* background-color only — the shorthand would reset the gradient image. */
+  background-color: var(--dsw-alias-button-info-hover);
+  box-shadow: var(--dsw-alias-button-glow-hover, var(--dsw-alias-button-glow, none));
+}
+
+.primary:active:not(:disabled) {
+  box-shadow: var(--dsw-alias-button-press-shadow, none);
+  transform: var(--dsw-alias-button-send-shift-active, translateY(-2px));
 }
 
 .primary:disabled {

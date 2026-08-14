@@ -228,6 +228,17 @@ export interface SessionSearchItem {
   snippet: string
 }
 
+/** One session-reference candidate for the '@' mention picker (the resolver's host-facing shape). */
+export interface SessionReferenceCandidate {
+  sessionId: SessionId
+  /** Latest log-backed title, falling back to the opaque session id. */
+  label: string
+  /** Source session working directory, when recorded. */
+  cwd?: string
+  /** Source session creation time in Unix epoch milliseconds. */
+  createdAt: number
+}
+
 /** Session-domain unary methods (the map keys session.* of RpcMethodMap). */
 export interface SessionsApi {
   /** Lists persisted sessions (updatedAt descending). v1 returns everything; cursor is a reserved seat, unimplemented. */
@@ -242,6 +253,18 @@ export interface SessionsApi {
     request: RpcRequest<{ query: string }>,
     signal: AbortSignal,
   ): Promise<RpcResponse<{ items: SessionSearchItem[]; hasMore: boolean }>>
+
+  /**
+   * Lists session-reference candidates for the session's agent: every logical
+   * session except the caller, ranked by working-directory affinity and
+   * filtered by an optional case-insensitive session-id/cwd/title substring.
+   * The deployment must mount the session-reference service; a composition
+   * without it fails with `session-reference-failed`.
+   */
+  referenceCandidates(
+    request: RpcRequest<{ sessionId: SessionId; query?: string; limit?: number }>,
+    signal: AbortSignal,
+  ): Promise<RpcResponse<{ candidates: SessionReferenceCandidate[] }>>
 
   /**
    * Creates a real session and its idle agent. At most one of `workspaceId` /

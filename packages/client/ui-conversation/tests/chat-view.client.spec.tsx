@@ -162,6 +162,7 @@ function makeHarness(init?: Partial<ConversationSnapshot>) {
     read: () => savedScroll,
   }
   const forkAt = vi.fn()
+  const resend = vi.fn()
   // Selection rides the REAL chat store (same construction path as
   // production; the view reads it through the PropsStore useStore share).
   const chat = createChatStore().create()
@@ -287,6 +288,7 @@ function makeHarness(init?: Partial<ConversationSnapshot>) {
     inspectCall,
     chatScroll,
     forkAt,
+    resend,
     // Absent-service default; mention tests override with a real resolver.
     fileMentions: () => undefined,
     // Mirrors the real lookup chain (conversation namespace, then common).
@@ -295,7 +297,7 @@ function makeHarness(init?: Partial<ConversationSnapshot>) {
   const setSelection = (next: SelectionTarget | null): void => { chat.actions.select(next) }
   return {
     set, ChatView, props, openDetails, openFile, loadOlder, inspectCall,
-    chatScroll, forkAt, setSelection, toolOwners,
+    chatScroll, forkAt, resend, setSelection, toolOwners,
   }
 }
 
@@ -1353,5 +1355,52 @@ describe('ChatView', () => {
     const failedView = render(<failed.ChatView {...failed.props} />)
     expect(failedView.getByText('Compaction cancelled.')).toBeTruthy()
     expect(failedView.container.querySelector('[data-state="error"]')).not.toBeNull()
+  })
+})
+
+describe('failed-round resend', () => {
+  it('shows 重新发起 on the last user message after its turn failed, and re-sends its text', () => {
+    const h = makeHarness({ nodes: [user(1, 'build the thing'), turnError(2)] })
+    const view = render(<h.ChatView {...h.props} />)
+    const resendButton = view.getByRole('button', { name: '重新发起' })
+    fireEvent.click(resendButton)
+    expect(h.resend).toHaveBeenCalledWith('build the thing')
+  })
+
+  it('treats a max-tokens turn end as a failed round', () => {
+    const h = makeHarness({ nodes: [user(1, 'continue the task'), turnMaxTokens(2)] })
+    const view = render(<h.ChatView {...h.props} />)
+    expect(view.getByRole('button', { name: '重新发起' })).toBeTruthy()
+  })
+
+  it('hides the reload action when the tail is healthy or empty', () => {
+    const healthy = makeHarness({ nodes: [user(1, 'build the thing'), assistant(2, 'done', 1)] })
+    const healthyView = render(<healthy.ChatView {...healthy.props} />)
+    expect(healthyView.queryByRole('button', { name: '重新发起' })).toBeNull()
+
+    const empty = makeHarness({ nodes: [assistant(2, 'done', 1)] })
+    const emptyView = render(<empty.ChatView {...empty.props} />)
+    expect(emptyView.queryByRole('button', { name: '重新发起' })).toBeNull()
+  })
+
+  it('drops the reload action once a newer user message follows the failure', () => {
+    const h = makeHarness({ nodes: [user(1, 'first'), turnError(2), user(3, 'second')] })
+    const view = render(<h.ChatView {...h.props} />)
+    expect(view.queryByRole('button', { name: '重新发起' })).toBeNull()
+  })
+
+  it('hides the reload action while a turn is running', () => {
+    const h = makeHarness({ nodes: [user(1, 'build the thing'), turnError(2)] })
+    const view = render(<h.ChatView {...h.props} />)
+    expect(view.getByRole('button', { name: '重新发起' })).toBeTruthy()
+    act(() => { h.set({ running: true }) })
+    expect(view.queryByRole('button', { name: '重新发起' })).toBeNull()
+  })
+
+  it('re-sends the text of the failed round even when earlier rounds failed too', () => {
+    const h = makeHarness({ nodes: [user(1, 'old task'), turnError(2), user(3, 'new task'), turnError(4)] })
+    const view = render(<h.ChatView {...h.props} />)
+    fireEvent.click(view.getByRole('button', { name: '重新发起' }))
+    expect(h.resend).toHaveBeenCalledWith('new task')
   })
 })

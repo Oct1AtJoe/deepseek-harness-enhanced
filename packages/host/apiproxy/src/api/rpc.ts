@@ -98,6 +98,13 @@ export interface RpcErrorDetailsMap {
   'subagent-not-resumable': { childSessionId: SessionId }
   'subagent-unauthorized': { childSessionId: SessionId }
   'subagent-delivery-unavailable': { childSessionId: SessionId }
+  /**
+   * A session-reference operation failed: the session-reference service is
+   * absent from the composition, a referenced session could not be read or
+   * fit the snapshot budget, or mention normalization rejected the text. The
+   * message is the resolver's own text; the prompt was NOT enqueued.
+   */
+  'session-reference-failed': {}
   'internal': {}
 }
 

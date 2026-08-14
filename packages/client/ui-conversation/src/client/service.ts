@@ -56,6 +56,15 @@ export interface IConversation {
    * @returns completion of the page pull.
    */
   loadOlder(): Promise<void>
+  /**
+   * Switch one session's active view-ring tab (the chat store write). The
+   * per-session switcher is registered by the session body's registration
+   * (which holds the baked store actions); the composer's tool-row seats
+   * call through this service because they hold no store seat of their own.
+   * @param sessionId - target session (the caller's current session).
+   * @param view - target view-ring entry id.
+   */
+  setView(sessionId: SessionId, view: string): void
 }
 
 /** Create one browser-only draft descriptor; only its id enters input state. */
@@ -97,6 +106,8 @@ export class ConversationController extends Service implements IConversation {
   private readonly imageUrls = new Map<string, ImageUrlEntry>()
   private readonly imageGenerations = new Map<SessionId, number>()
   private readonly createdImageUrls = new Set<string>()
+  /** Per-session view-ring switchers, registered by the session body registration (idempotent; overwritten per render). */
+  private readonly viewSwitchers = new Map<SessionId, (view: string) => void>()
   private disposed = false
 
   /**
@@ -285,6 +296,23 @@ export class ConversationController extends Service implements IConversation {
   /** Pull one older history page for the scoped Session. */
   async loadOlder(): Promise<void> {
     await this.scopedSession('loadOlder').loadOlder()
+  }
+
+  /**
+   * Register the session body's view-ring switcher (its baked store action).
+   * Idempotent: called on every body render, overwriting the previous
+   * closure; the entry goes stale only for sessions that stop rendering,
+   * which can no longer be the target of a composer click.
+   * @param sessionId - the rendered session.
+   * @param switcher - the baked chat-store setView action.
+   */
+  registerViewSwitcher(sessionId: SessionId, switcher: (view: string) => void): void {
+    this.viewSwitchers.set(sessionId, switcher)
+  }
+
+  /** Switch the target session's view-ring tab through its registered switcher. */
+  setView(sessionId: SessionId, view: string): void {
+    this.viewSwitchers.get(sessionId)?.(view)
   }
 
   /** Resolve the caller scope's session face or throw on root contexts. */

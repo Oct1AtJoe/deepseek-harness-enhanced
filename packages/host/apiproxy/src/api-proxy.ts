@@ -12,13 +12,15 @@ import type { Agent, ModelSelection, ModelSelectionRef, AgentOptions, AgentStatu
 import type {} from '@deepseek-ai/dsh-agent-presets/types'
 import { AttachmentError } from '@deepseek-ai/dsh-attachment'
 import type { ImageAttachmentRef } from '@deepseek-ai/dsh-attachment'
-import { contentHasImage, createUserMessage, freezeMessage, ReasoningEffortId } from '@deepseek-ai/dsh-llm'
+import { createUserMessage, freezeMessage, LlmError, ReasoningEffortId } from '@deepseek-ai/dsh-llm'
 import { errorChain } from '@deepseek-ai/dsh-llm'
-import type { ContentBlock, MessageSource } from '@deepseek-ai/dsh-llm'
+import type { ContentBlock, LlmCallConfig, MessageSource } from '@deepseek-ai/dsh-llm'
 import { isAppendSurfaceEvent, isJsonValue } from '@deepseek-ai/dsh-session'
 import type { JsonValue, Session, SessionEvent, SessionEventMap, SessionHeader, SessionId, UserMessage } from '@deepseek-ai/dsh-session'
 import type { SessionPersistence } from '@deepseek-ai/dsh-session-persistence'
 import { SessionQueryError, type SessionSearchCursor } from '@deepseek-ai/dsh-session-query'
+import { SessionReferenceError, parseSessionReferenceText } from '@deepseek-ai/dsh-session-reference'
+import type { SessionReferenceInput } from '@deepseek-ai/dsh-session-reference'
 import { SubagentError } from '@deepseek-ai/dsh-subagent'
 import type { SubagentListEntry as CatalogSubagentListEntry } from '@deepseek-ai/dsh-subagent'
 import { isUserInvocable } from '@deepseek-ai/dsh-skill'
@@ -38,7 +40,8 @@ import type {} from '@deepseek-ai/dsh-tools'
 import type {
   ApiProxy, ConfigurableProviderView, CredentialView, GoalRef, HistoryEntry, HostFrame,
   ModelCatalogFailure, ModelProviderGroup,
-  ModelReasoning, MuxFrame, PromptContentPart, QuestionResponsePayload, SessionListMetadata, SessionProjectionsBlock, SessionSearchItem,
+  ModelReasoning, MuxFrame, PromptContentPart, QuestionResponsePayload, SessionListMetadata, SessionProjectionsBlock,
+  SessionReferenceCandidate, SessionSearchItem,
   QueuedInboxItem, SessionSummary, SettingsNamespaceView, SubagentAddress, JobView, ToolEventView,
   WorkspaceId, WorkspaceView,
 } from './api/index.ts'
@@ -187,9 +190,69 @@ async function durablePromptContent(ctx: Context, content: readonly PromptConten
   return blocks
 }
 
+/**
+ * Normalize one prompt batch for session references: strip canonical
+ * `dsh-session:` mentions from text blocks into readable content, then
+ * snapshot every referenced session through the resolver. A composition
+ * without the session-reference service, malformed mention text, an unreadable
+ * referenced session, or an over-budget snapshot all refuse the prompt before
+ * anything is enqueued — never a partial send.
+ */
+async function normalizeSessionReferences(
+  ctx: Context,
+  request: RpcRequest<unknown>,
+  agent: Agent,
+  content: readonly ContentBlock[],
+): Promise<
+  | { content: ContentBlock[] }
+  | { content: ContentBlock[]; context: UserMessage }
+  | { refused: RpcResponse<{ accepted: true }> }
+> {
+  const blocks: ContentBlock[] = []
+  const references: SessionReferenceInput[] = []
+  try {
+    for (const block of content) {
+      if (block.type !== 'text') {
+        blocks.push(block)
+        continue
+      }
+      const parsed = parseSessionReferenceText(block.text)
+      blocks.push({ type: 'text', text: parsed.text })
+      references.push(...parsed.references)
+    }
+  } catch (error: unknown) {
+    return refusedSessionReference(request, `session reference rejected: ${error instanceof Error ? error.message : String(error)}`)
+  }
+  if (references.length === 0) return { content: blocks }
+  const resolver = ctx.get('sessionReferenceResolver')
+  if (resolver === undefined) {
+    return refusedSessionReference(
+      request,
+      'session references are unavailable: this deployment does not mount the session-reference service',
+    )
+  }
+  try {
+    const prepared = await resolver.prepare(agent, blocks, references)
+    return prepared.additionalContext === undefined
+      ? { content: prepared.content }
+      : { content: prepared.content, context: prepared.additionalContext }
+  } catch (error: unknown) {
+    const message = error instanceof SessionReferenceError
+      ? `session reference rejected: ${error.message}`
+      : `session reference preparation failed: ${error instanceof Error ? error.message : String(error)}`
+    return refusedSessionReference(request, message)
+  }
+}
+
+/** One `session-reference-failed` refusal for the caller of a prompt-shaped RPC. */
+function refusedSessionReference(request: RpcRequest<unknown>, message: string): { refused: RpcResponse<{ accepted: true }> } {
+  return {
+    refused: err<{ accepted: true }>(request, { code: 'session-reference-failed', message, details: {} }),
+  }
+}
+
 /** Search durable content for an image reference, including nested tool results. */
-function imageBlockIn(content: unknown, match: (ref: ImageAttachmentRef) => boolean): ImageAttachmentRef | undefined {
-  if (!Array.isArray(content)) return undefined
+function imageBlockIn(content: unknown, match: (ref: ImageAttachmentRef) => boolean): ImageAttachmentRef | undefined {  if (!Array.isArray(content)) return undefined
   for (const value of content) {
     if (typeof value !== 'object' || value === null || Array.isArray(value)) continue
     const block = value as { type?: unknown; attachment?: unknown; content?: unknown }
@@ -229,11 +292,6 @@ function imageInEvent(event: SessionEvent, match: (ref: ImageAttachmentRef) => b
     return imageBlockIn([data.chunk.block], match)
   }
   return undefined
-}
-
-/** True when the current model-visible surface contains an image. */
-function messagesHaveImage(messages: readonly { content: readonly ContentBlock[] }[]): boolean {
-  return messages.some(message => contentHasImage(message.content))
 }
 
 /** Resolve the first reference matching one opaque id. */
@@ -649,6 +707,19 @@ export interface ApiProxyDefaults {
    * and undoing it because storage failed would be the worse outcome.
    */
   saveDefaultModelSelection?: (selection: ModelSelection) => Promise<void>
+  /**
+   * Read the remembered effort for one provider/model route, when the
+   * deployment persists one. Consulted when a selection names no effort, so
+   * an effort chosen for a model follows it into every session.
+   */
+  modelEffort?: (provider: string, model: string) => string | undefined
+  /**
+   * Record or clear the remembered effort for one provider/model route.
+   * Either absent, or a closure that may itself decline — the gateway plugin
+   * always passes one, and it no-ops when the deployment mounts no settings
+   * provider.
+   */
+  saveModelEffort?: (provider: string, model: string, effort: string | undefined) => Promise<void>
   /** Default project directory for new sessions whose create request carries no cwd. */
   cwd: string
   /** Native open-with-default-application; injectable for carrier tests. */
@@ -2164,6 +2235,33 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
         }
       },
 
+      async referenceCandidates(request, signal) {
+        const { sessionId, query, limit } = request.payload
+        const resolved = await turnAgentFor<{ candidates: SessionReferenceCandidate[] }>(request, sessionId)
+        if ('refused' in resolved) return resolved.refused
+        const resolver = ctx.get('sessionReferenceResolver')
+        if (resolver === undefined) {
+          return err(request, {
+            code: 'session-reference-failed',
+            message: 'session references are unavailable: this deployment does not mount the session-reference service',
+            details: {},
+          })
+        }
+        try {
+          const candidates = await resolver.listCandidates(resolved.agent, query ?? '', limit, signal)
+          return ok(request, { candidates })
+        } catch (error: unknown) {
+          if (isAborted(signal)) {
+            return err(request, { code: 'cancelled', message: 'session reference candidates were aborted', details: {} })
+          }
+          return err(request, {
+            code: 'session-reference-failed',
+            message: `session reference candidates failed: ${error instanceof Error ? error.message : String(error)}`,
+            details: {},
+          })
+        }
+      },
+
       async create(request) {
         const sessionId = request.payload.sessionId ?? `session-${randomUUID()}` as SessionId
         let workspace: Workspace | undefined
@@ -2285,24 +2383,34 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
         if ('error' in found) return err(request, found.error)
         return serializeImageAdmission(found.agent, async () => {
           try {
-            const resolved = await ctx.llm.resolveCallConfig({
-              provider,
-              model,
-              ...reasoningEffort === undefined
-                ? {}
-                : { reasoningEffort: ReasoningEffortId(reasoningEffort) },
-            })
-            const pendingImage = [...found.agent.inbox.nextTurn, ...found.agent.inbox.nextStep]
-              .some(message => contentHasImage(message.content))
-            if (pendingImage || messagesHaveImage(found.agent.session.deriveMessages())) {
-              const info = await ctx.llm.resolveModelInfo(resolved.provider, resolved.model)
-              if (info.inputModalities !== undefined && !info.inputModalities.includes('image')) {
-                return err(request, {
-                  code: 'model-unavailable',
-                  message: `Model "${resolved.model}" does not accept image input, but this session already contains images; select an image-capable model.`,
-                  details: { provider, model },
-                })
+            // An omitted effort applies the route's remembered one, then the
+            // adapter default; an empty string clears the memory explicitly.
+            const requested = reasoningEffort === '' ? undefined : reasoningEffort
+            const remembered = reasoningEffort === undefined
+              ? defaults.modelEffort?.(provider, model)
+              : undefined
+            let stale = false
+            const resolve = (effort: string | undefined): Promise<LlmCallConfig> =>
+              ctx.llm.resolveCallConfig({
+                provider,
+                model,
+                ...effort === undefined ? {} : { reasoningEffort: ReasoningEffortId(effort) },
+              })
+            let resolved: LlmCallConfig
+            if (requested !== undefined) {
+              resolved = await resolve(requested)
+            } else if (remembered !== undefined) {
+              try {
+                resolved = await resolve(remembered)
+              } catch (error: unknown) {
+                if (!(error instanceof LlmError) || error.code !== 'UNSUPPORTED_REASONING_EFFORT') throw error
+                // A stale remembered effort must not block the switch: fall
+                // back to the adapter default and forget the preference.
+                stale = true
+                resolved = await resolve(undefined)
               }
+            } else {
+              resolved = await resolve(undefined)
             }
             const selected: ModelSelection = {
               provider: resolved.provider,
@@ -2313,6 +2421,10 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
             }
             selectionFor(found.agent).current = selected
             try {
+              if (stale) await defaults.saveModelEffort?.(provider, model, undefined)
+              if (reasoningEffort !== undefined) {
+                await defaults.saveModelEffort?.(provider, model, requested)
+              }
               await defaults.saveDefaultModelSelection?.(selected)
             } catch (error: unknown) {
               ctx.logger.warn(
@@ -2482,19 +2594,13 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
         const hasImage = content.some(part => part.type === 'image')
         const admit = async (): Promise<RpcResponse<{ accepted: true }>> => {
           try {
-            if (hasImage) {
-              const current = selectionFor(agent).current
-              const modelInfo = await ctx.llm.resolveModelInfo(current.provider, current.model)
-              if (modelInfo.inputModalities !== undefined && !modelInfo.inputModalities.includes('image')) {
-                return err(request, {
-                  code: 'attachment-error',
-                  message: `Model "${current.model}" does not support image input.`,
-                  details: { reason: 'MODEL_DOES_NOT_SUPPORT_IMAGES' },
-                })
-              }
-            }
             const durable = await durablePromptContent(ctx, content)
-            const message: UserMessage = createUserMessage({ content: durable, source })
+            const normalized = await normalizeSessionReferences(ctx, request, agent, durable)
+            if ('refused' in normalized) return normalized.refused
+            const message: UserMessage = createUserMessage({ content: normalized.content, source })
+            // Referenced-session snapshots ride the same step as the readable
+            // prompt: inject before the wake so the pre-step claims both.
+            if ('context' in normalized && normalized.context !== undefined) agent.inject(normalized.context)
             if (mode === 'steer') agent.steer(message)
             else agent.followup(message)
           } catch (error: unknown) {

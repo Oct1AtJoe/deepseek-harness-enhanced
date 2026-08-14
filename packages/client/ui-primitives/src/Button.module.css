@@ -7,7 +7,9 @@
   justify-content: center;
   gap: 4px;
   border: none;
-  border-radius: 18px;
+  /* Tech themes square the capsule off (--dsw-alias-button-radius); the base
+     palettes leave it unset and fall back to the figma 18px. */
+  border-radius: var(--dsw-alias-button-radius, 18px);
   cursor: pointer;
   font-size: 14px;
   line-height: 22px;
@@ -32,16 +34,33 @@
   font-size: 12px;
   line-height: 18px;
   padding: 0 10px;
-  border-radius: 14px;
+  border-radius: var(--dsw-alias-button-radius-sm, 14px);
 }
 
 .primary {
-  background: var(--dsw-alias-button-primary-fill);
+  /* --dsw-alias-button-primary-bg carries the tech themes' gradient fill
+     (fallback: the solid fill token, which other components consume as
+     accent-color/background and must stay color-safe); background-size and
+     motion gate the drift animation, glow rides box-shadow. Base palettes
+     leave the effect tokens unset, so light/dark/aurora keep the flat look. */
+  background: var(--dsw-alias-button-primary-bg, var(--dsw-alias-button-primary-fill));
+  background-size: var(--dsw-alias-button-primary-bg-size, auto);
+  box-shadow: var(--dsw-alias-button-glow, none);
+  animation: var(--dsw-alias-button-primary-motion, none);
   color: var(--dsw-alias-label-primary-foreground);
 }
 
 .primary:hover:not(:disabled) {
-  background: var(--dsw-alias-button-primary-hover);
+  background: var(--dsw-alias-button-primary-bg-hover, var(--dsw-alias-button-primary-hover));
+  box-shadow: var(--dsw-alias-button-glow-hover, var(--dsw-alias-button-glow, none));
+}
+
+/* Pixel-style press: tech themes collapse the hard shadow to a stub and
+   shift the button 2px (classic 8-bit feedback); base palettes default both
+   to inert values. */
+.primary:active:not(:disabled) {
+  box-shadow: var(--dsw-alias-button-press-shadow, none);
+  transform: var(--dsw-alias-button-press-shift, none);
 }
 
 .ghost:hover:not(:disabled) {
@@ -60,6 +79,12 @@
 
 .outline:hover:not(:disabled) {
   background: var(--dsw-alias-interactive-bg-hover);
+  box-shadow: var(--dsw-alias-button-outline-glow, none);
+}
+
+.outline:active:not(:disabled) {
+  box-shadow: var(--dsw-alias-button-press-shadow, none);
+  transform: var(--dsw-alias-button-press-shift, none);
 }
 
 .toolbar {
@@ -76,4 +101,11 @@
   height: 16px;
   align-items: center;
   justify-content: center;
+}
+
+/* Tech-theme motion (gradient drift) respects reduced-motion preferences. */
+@media (prefers-reduced-motion: reduce) {
+  .button {
+    animation: none !important;
+  }
 }

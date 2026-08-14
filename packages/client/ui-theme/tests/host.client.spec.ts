@@ -24,6 +24,11 @@ describe('ui-theme host', () => {
     expect(ctx.settings.get(ns)).toEqual({ preference: DEFAULT_PREFERENCE })
     await ctx.settings.update(ns, { preference: 'dark' })
     expect(ctx.settings.get(ns)).toEqual({ preference: 'dark' })
+    // The aurora and nebula variants are built-in preferences: accepted and persisted.
+    await ctx.settings.update(ns, { preference: 'aurora' })
+    expect(ctx.settings.get(ns)).toEqual({ preference: 'aurora' })
+    await ctx.settings.update(ns, { preference: 'nebula' })
+    expect(ctx.settings.get(ns)).toEqual({ preference: 'nebula' })
     await expect(ctx.settings.update(ns, { preference: 'sepia' })).rejects.toThrow()
     await fiber.dispose()
     expect(ctx.settings.describe().map(row => row.ns)).not.toContain(ns)

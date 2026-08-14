@@ -133,8 +133,8 @@ describe('serializeMessages', () => {
     expect(wire).toEqual([{ role: 'user', content: 'see chart' }])
   })
 
-  it('rejects image blocks instead of silently flattening them away', () => {
-    expect(() => serializeMessages([createUserMessage({
+  it('renders image blocks as text placeholders instead of dropping or rejecting them', () => {
+    const wire = serializeMessages([createUserMessage({
       content: [{
         type: 'image',
         attachment: {
@@ -143,7 +143,31 @@ describe('serializeMessages', () => {
         },
       }],
       source: { kind: 'plugin', plugin: 'test' },
-    })])).toThrow(expect.objectContaining({ code: 'UNSUPPORTED_CONTENT' }))
+    })])
+    expect(wire).toEqual([{
+      role: 'user',
+      content: `[image attachment sha256:${'a'.repeat(64)} (image/png, 1x1px, 68 bytes)]`,
+    }])
+  })
+
+  it('keeps image placeholders beside surrounding text in order', () => {
+    const wire = serializeMessages([createUserMessage({
+      content: [
+        { type: 'text', text: 'see ' },
+        {
+          type: 'image',
+          attachment: {
+            attachmentId: AttachmentId(`sha256:${'b'.repeat(64)}`),
+            mediaType: 'image/webp', bytes: 12, width: 2, height: 3,
+          },
+        },
+      ],
+      source: { kind: 'plugin', plugin: 'test' },
+    })])
+    expect(wire).toEqual([{
+      role: 'user',
+      content: `see [image attachment sha256:${'b'.repeat(64)} (image/webp, 2x3px, 12 bytes)]`,
+    }])
   })
 
   it('emits an empty user message rather than dropping block-less messages', () => {

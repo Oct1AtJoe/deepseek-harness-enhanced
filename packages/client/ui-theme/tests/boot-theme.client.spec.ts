@@ -57,6 +57,28 @@ describe('theme boot index transform', () => {
     expect(document.body.hasAttribute(DARK_ATTRIBUTE)).toBe(dark)
   })
 
+  it('maps the aurora preference to the dark palette regardless of the OS scheme', () => {
+    mockSystemDark(false)
+    executeBootstrap('aurora')
+    expect(document.documentElement.style.colorScheme).toBe('dark')
+    expect(document.body.hasAttribute(DARK_ATTRIBUTE)).toBe(true)
+    mockSystemDark(true)
+    executeBootstrap('aurora')
+    expect(document.documentElement.style.colorScheme).toBe('dark')
+    expect(document.body.hasAttribute(DARK_ATTRIBUTE)).toBe(true)
+  })
+
+  it('maps the nebula preference to the dark palette regardless of the OS scheme', () => {
+    mockSystemDark(false)
+    executeBootstrap('nebula')
+    expect(document.documentElement.style.colorScheme).toBe('dark')
+    expect(document.body.hasAttribute(DARK_ATTRIBUTE)).toBe(true)
+    mockSystemDark(true)
+    executeBootstrap('nebula')
+    expect(document.documentElement.style.colorScheme).toBe('dark')
+    expect(document.body.hasAttribute(DARK_ATTRIBUTE)).toBe(true)
+  })
+
   it('defaults to system and falls back to light when matchMedia is unavailable', () => {
     vi.stubGlobal('matchMedia', undefined)
     executeBootstrap()

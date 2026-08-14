@@ -196,7 +196,7 @@ describe('Web session model selection', () => {
     await ctx.fiber.dispose()
   })
 
-  it('refuses a text-only selection while durable or pending image content remains visible', async () => {
+  it('allows a text-only selection while durable or pending image content remains visible', async () => {
     const { ctx, agent, sessionId } = await harness()
     registerTextOnly(ctx)
     const api = createApiProxy(ctx, {
@@ -210,23 +210,18 @@ describe('Web session model selection', () => {
     agent.session.append('user/message', {
       id: 'image-message', role: 'user', source: { kind: 'user' }, content: [image],
     } as never, { surfaceOp: 'append' })
-    expect((await api.sessions.selectModel(request({
+    // Durable image content stays visible; the text-only route serializes it
+    // as a placeholder, so the switch is allowed.
+    expect(expectValue(await api.sessions.selectModel(request({
       sessionId, provider: 'text-only', model: 'plain',
-    }))).result).toMatchObject({ ok: false, error: { code: 'model-unavailable' } })
+    }))).selected).toEqual({ provider: 'text-only', model: 'plain' })
 
-    agent.session.append('user/message', {
-      id: 'summary', role: 'user', source: { kind: 'plugin', plugin: 'compact' },
-      content: [{ type: 'text', text: 'image summarized' }],
-    } as never, {
-      surfaceOp: { op: 'replace', start: 0, end: agent.session.events.length - 1 },
-      sourceEventSeqs: agent.session.events.map(event => event.seq),
-    })
     ;(agent.inbox.nextTurn as UserMessage[]).push({
       id: 'pending-image', role: 'user', source: { kind: 'user' }, content: [image],
     } as never)
-    expect((await api.sessions.selectModel(request({
+    expect(expectValue(await api.sessions.selectModel(request({
       sessionId, provider: 'text-only', model: 'plain',
-    }))).result.ok).toBe(false)
+    }))).selected).toEqual({ provider: 'text-only', model: 'plain' })
     ;(agent.inbox.nextTurn as UserMessage[]).length = 0
     expect(expectValue(await api.sessions.selectModel(request({
       sessionId, provider: 'text-only', model: 'plain',
@@ -446,6 +441,62 @@ describe('Web session model selection', () => {
     expect(stillAccepted.selected).toEqual({ provider: 'deepseek-official', model: 'deepseek-chat', reasoningEffort: 'high' })
     expect(expectValue(await api.sessions.models(request({ sessionId }))).current)
       .toEqual({ provider: 'deepseek-official', model: 'deepseek-chat', reasoningEffort: 'high' })
+    await ctx.fiber.dispose()
+  })
+
+  it('applies the remembered effort to a bare re-pick and clears it on an empty effort', async () => {
+    const { ctx, sessionId } = await harness()
+    const memory = new Map<string, string>()
+    const api = createApiProxy(ctx, {
+      defaultModelSelection: () => ({ provider: 'deepseek-official', model: 'deepseek-chat' }),
+      modelEffort: (provider, model) => memory.get(`${provider}/${model}`),
+      saveModelEffort: async (provider, model, effort) => {
+        if (effort === undefined) memory.delete(`${provider}/${model}`)
+        else memory.set(`${provider}/${model}`, effort)
+      },
+      cwd: '/tmp',
+    })
+
+    // An explicit pick records the effort for the route.
+    expectValue(await api.sessions.selectModel(request({
+      sessionId, provider: 'deepseek-official', model: 'deepseek-reasoner', reasoningEffort: 'max',
+    })))
+    expect(memory.get('deepseek-official/deepseek-reasoner')).toBe('max')
+    // A bare re-pick of the same model applies the remembered effort instead
+    // of the adapter default high.
+    expect(expectValue(await api.sessions.selectModel(request({
+      sessionId, provider: 'deepseek-official', model: 'deepseek-reasoner',
+    }))).selected).toEqual({ provider: 'deepseek-official', model: 'deepseek-reasoner', reasoningEffort: 'max' })
+    // An empty effort explicitly clears the memory back to provider behavior.
+    expect(expectValue(await api.sessions.selectModel(request({
+      sessionId, provider: 'deepseek-official', model: 'deepseek-reasoner', reasoningEffort: '',
+    }))).selected).toEqual({ provider: 'deepseek-official', model: 'deepseek-reasoner', reasoningEffort: 'high' })
+    expect(memory.has('deepseek-official/deepseek-reasoner')).toBe(false)
+    expect(expectValue(await api.sessions.selectModel(request({
+      sessionId, provider: 'deepseek-official', model: 'deepseek-reasoner',
+    }))).selected).toEqual({ provider: 'deepseek-official', model: 'deepseek-reasoner', reasoningEffort: 'high' })
+    await ctx.fiber.dispose()
+  })
+
+  it('falls back to the adapter default and forgets a remembered effort the model no longer supports', async () => {
+    const { ctx, sessionId } = await harness()
+    const memory = new Map([['deepseek-official/deepseek-chat', 'medium']])
+    const api = createApiProxy(ctx, {
+      defaultModelSelection: () => ({ provider: 'deepseek-official', model: 'deepseek-chat' }),
+      modelEffort: (provider, model) => memory.get(`${provider}/${model}`),
+      saveModelEffort: async (provider, model, effort) => {
+        if (effort === undefined) memory.delete(`${provider}/${model}`)
+        else memory.set(`${provider}/${model}`, effort)
+      },
+      cwd: '/tmp',
+    })
+
+    // The remembered effort is not among the model's advertised levels: the
+    // switch still lands on the adapter default and drops the stale memory.
+    expect(expectValue(await api.sessions.selectModel(request({
+      sessionId, provider: 'deepseek-official', model: 'deepseek-chat',
+    }))).selected).toEqual({ provider: 'deepseek-official', model: 'deepseek-chat', reasoningEffort: 'high' })
+    expect(memory.has('deepseek-official/deepseek-chat')).toBe(false)
     await ctx.fiber.dispose()
   })
 

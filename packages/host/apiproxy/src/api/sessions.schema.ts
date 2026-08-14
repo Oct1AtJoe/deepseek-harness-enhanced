@@ -12,7 +12,8 @@ import type { RequestPayload, ResponseValue } from './rpc-map.ts'
 import type { Wire } from './rpc.schema.ts'
 import type {
   HistoryEntry, ModelCatalogFailure, ModelCatalogModel, ModelProviderGroup, ModelReasoning,
-  ModelReasoningEffort, ModelSelection, SessionListMetadata, SessionProjectionsBlock, SessionSearchItem, SessionSummary,
+  ModelReasoningEffort, ModelSelection, SessionListMetadata, SessionProjectionsBlock,
+  SessionReferenceCandidate, SessionSearchItem, SessionSummary,
 } from './sessions.ts'
 import type { ToolEventView } from './events.ts'
 import type { AttachmentIdType, ImageAttachmentLimits, ImageAttachmentRef } from '@deepseek-ai/dsh-attachment'
@@ -97,6 +98,26 @@ export const sessionSearchValueSchema = z.object({
   items: z.array(sessionSearchItemSchema).max(SESSION_SEARCH_RESULT_LIMIT),
   hasMore: z.boolean(),
 }) satisfies z.ZodType<Wire<ResponseValue<'session.search'>>>
+
+/** One session-reference candidate row (label = latest title or session id). */
+export const sessionReferenceCandidateSchema = z.object({
+  sessionId: sessionIdSchema,
+  label: z.string().min(1),
+  cwd: z.string().optional(),
+  createdAt: z.number(),
+}) as unknown as z.ZodType<Wire<SessionReferenceCandidate>>
+
+/** session.referenceCandidates request payload (query matches id/cwd/title substrings). */
+export const sessionReferenceCandidatesRequestSchema = z.object({
+  sessionId: sessionIdSchema,
+  query: z.string().max(500).optional(),
+  limit: z.number().int().positive().max(100).optional(),
+}) satisfies z.ZodType<Wire<RequestPayload<'session.referenceCandidates'>>>
+
+/** session.referenceCandidates response value. */
+export const sessionReferenceCandidatesValueSchema: z.ZodType<Wire<ResponseValue<'session.referenceCandidates'>>> = z.object({
+  candidates: z.array(sessionReferenceCandidateSchema),
+}) as unknown as z.ZodType<Wire<ResponseValue<'session.referenceCandidates'>>>
 
 /** session.create request payload (at most one of workspaceId / cwd). */
 export const sessionCreateRequestSchema = z.object({
@@ -254,12 +275,12 @@ export const sessionModelsValueSchema = z.object({
   failures: z.array(modelCatalogFailureSchema),
 }) satisfies z.ZodType<Wire<ResponseValue<'session.models'>>>
 
-/** session.selectModel request payload. */
+/** session.selectModel request payload. An empty effort explicitly clears the route's remembered effort. */
 export const sessionSelectModelRequestSchema = z.object({
   sessionId: sessionIdSchema,
   provider: z.string().min(1),
   model: z.string().min(1),
-  reasoningEffort: z.string().min(1).optional(),
+  reasoningEffort: z.string().optional(),
 }) satisfies z.ZodType<Wire<RequestPayload<'session.selectModel'>>>
 
 /** session.selectModel response value. */

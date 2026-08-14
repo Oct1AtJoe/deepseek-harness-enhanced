@@ -41,6 +41,10 @@ export interface DiffBlockProps {
   maxLines?: number | undefined
   /** Extra class merged onto the wrapper (callers position; this component draws). */
   className?: string | undefined
+  /** Draw the per-file path headers and the same-file gap rows (default true). */
+  showPathHeaders?: boolean | undefined
+  /** Draw the dim `└ +A -R · N file(s)` summary (default true). */
+  showFooter?: boolean | undefined
 }
 
 /** A single rendered body line and its role, so the height cap slices a flat list. */
@@ -66,14 +70,16 @@ const ROW_CLASS: Record<DiffRow['kind'], string | undefined> = {
 /**
  * Flatten the hunks into the body's rows plus the footer counts. A path header
  * opens each new file; a same-file second hunk (a scattered edit) opens with a
- * `⋯` gap instead of repeating the path. Every old-side line counts toward
- * `removed` and every new-side line toward `added`. The file count is of
- * DISTINCT paths, matching the TUI diff card's footer, so two hunks in one file
- * read as `1 file` on both front ends.
+ * `⋯` gap instead of repeating the path. Both chrome rows drop out under
+ * `showPathHeaders: false` — a caller-owned title bar carries the path then.
+ * Every old-side line counts toward `removed` and every new-side line toward
+ * `added`. The file count is of DISTINCT paths, matching the TUI diff card's
+ * footer, so two hunks in one file read as `1 file` on both front ends.
  * @param diffs - the hunks to render.
+ * @param showPathHeaders - whether path and gap rows join the body.
  * @returns the body rows, the +/- totals, and the distinct-file count.
  */
-function buildRows(diffs: DiffHunk[]): { rows: DiffRow[]; added: number; removed: number; files: number } {
+function buildRows(diffs: DiffHunk[], showPathHeaders: boolean): { rows: DiffRow[]; added: number; removed: number; files: number } {
   const rows: DiffRow[] = []
   const paths = new Set<string>()
   let added = 0
@@ -81,8 +87,10 @@ function buildRows(diffs: DiffHunk[]): { rows: DiffRow[]; added: number; removed
   let prevPath: string | undefined
   for (const diff of diffs) {
     paths.add(diff.path)
-    if (diff.path !== prevPath) rows.push({ kind: 'path', text: diff.path })
-    else rows.push({ kind: 'gap', text: '⋯' })
+    if (showPathHeaders) {
+      if (diff.path !== prevPath) rows.push({ kind: 'path', text: diff.path })
+      else rows.push({ kind: 'gap', text: '⋯' })
+    }
     prevPath = diff.path
     if (diff.oldText !== null) {
       for (const line of contentLines(diff.oldText)) {
@@ -138,8 +146,10 @@ function copyText(rows: DiffRow[]): string {
  * @param props - see {@link DiffBlockProps}.
  * @returns the diff block element.
  */
-export function DiffBlock({ diffs, maxLines = DEFAULT_DIFF_MAX_LINES, className }: DiffBlockProps) {
-  const { rows, added, removed, files } = useMemo(() => buildRows(diffs), [diffs])
+export function DiffBlock({
+  diffs, maxLines = DEFAULT_DIFF_MAX_LINES, className, showPathHeaders = true, showFooter = true,
+}: DiffBlockProps) {
+  const { rows, added, removed, files } = useMemo(() => buildRows(diffs, showPathHeaders), [diffs, showPathHeaders])
   const [expanded, setExpanded] = useState(false)
   const [copied, setCopied] = useState(false)
 
@@ -189,7 +199,9 @@ export function DiffBlock({ diffs, maxLines = DEFAULT_DIFF_MAX_LINES, className 
           <div key={index} className={clsx(css.line, ROW_CLASS[row.kind])}>{row.text}</div>
         ))}
       </div>
-      <div className={css.footer}>└ +{added} -{removed} · {files} file{files === 1 ? '' : 's'}</div>
+      {showFooter && (
+        <div className={css.footer}>└ +{added} -{removed} · {files} file{files === 1 ? '' : 's'}</div>
+      )}
     </div>
   )
 }

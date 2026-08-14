@@ -193,10 +193,12 @@ export function ModelSelect(
       close(true)
       return
     }
+    // The provider-default row carries an empty effort: the Host treats it
+    // as clearing the route's remembered effort.
     const selection: ModelSelection = {
       provider: state.current.provider,
       model: state.current.model,
-      ...effort === undefined ? {} : { reasoningEffort: effort },
+      ...effort === undefined ? { reasoningEffort: '' } : { reasoningEffort: effort },
     }
     lastActionRef.current = 'select'
     void select(selection).then(settleSelection)

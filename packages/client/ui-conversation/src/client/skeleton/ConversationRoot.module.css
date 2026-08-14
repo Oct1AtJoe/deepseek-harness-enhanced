@@ -9,6 +9,9 @@
   height: 100%;
   min-width: 0;
   background: var(--dsw-alias-bg-base);
+  /* The chat column carries the tech themes' aurora gradient pools too (the
+     frame paints behind it); declared after the shorthand as above. */
+  background-image: var(--dsw-alias-bg-app-image, none);
 
   /* Shared width axis for the whole column: one content width W
      (--dsh-chat-content-width) for the transcript, the dock cards

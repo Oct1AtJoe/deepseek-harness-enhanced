@@ -1,0 +1,41 @@
+{
+  "name": "dsh-desktop",
+  "version": "0.1.0",
+  "description": "Electron shell that runs the DeepSeek Harness Web GUI (dsh web) as a desktop app",
+  "private": true,
+  "type": "module",
+  "main": "main.mjs",
+  "author": "DeepSeek AI",
+  "license": "MIT",
+  "scripts": {
+    "start": "electron .",
+    "smoke": "electron . --smoke",
+    "pack": "electron-builder"
+  },
+  "devDependencies": {
+    "electron": "^43.4.0",
+    "electron-builder": "^26.15.3"
+  },
+  "build": {
+    "appId": "ai.deepseek.harness.desktop",
+    "productName": "DeepSeek Harness",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "main.mjs",
+      "package.json"
+    ],
+    "win": {
+      "target": "nsis"
+    },
+    "mac": {
+      "target": "dmg",
+      "category": "public.app-category.developer-tools"
+    },
+    "linux": {
+      "target": "AppImage",
+      "category": "Development"
+    }
+  }
+}

@@ -210,6 +210,15 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
      */
     'conversation.input.plan': { kind: 'single'; scope: 'session'; owner: InputControlOwnerProps }
     /**
+     * The named subagent-activity seat in the composer tool row, immediately
+     * right of the access-mode control — one occupant, so taking it means
+     * rendering the subagent affordance yourself. The owner passes `locked`
+     * plus `setView` (switching to the subagent view ring tab); take
+     * everything else from the framework session kit or your own inject.
+     * Unoccupied, the seat renders nothing at all.
+     */
+    'conversation.input.subagent': { kind: 'single'; scope: 'session'; owner: ComposerSubagentOwnerProps }
+    /**
      * The named model-select seat at the right end of the composer tool row,
      * left of the send button — one occupant, so taking it means rendering the
      * whole model affordance yourself. Same `locked`-only owner share and same
@@ -364,6 +373,11 @@ export interface ChatNodeOwnerProps {
   /** Resolve a session-authorized historical image for inline display. */
   loadImage: (attachment: ImageAttachmentRef) => Promise<string>
   fileMentions: (owner: TurnTailOwnerProps) => MarkdownFileMentions | undefined
+  /**
+   * Re-send the plain text of a user message whose following turn ended in
+   * failure (the 重新发起 action); undefined when the message is not eligible.
+   */
+  onResend?: (() => void) | undefined
 }
 
 /** Full props of one registered keyed Chat business renderer. */
@@ -517,6 +531,13 @@ export interface ComposerBarInjected {
    */
   command: ((line: string) => Promise<boolean>) | undefined
   /**
+   * Switch the session's active view-ring tab. Routed through the
+   * conversation service (the bar holds no store seat; the session body's
+   * registration keeps the baked chat-store setView there). No-op while no
+   * session is current or the body has not registered.
+   */
+  setView: (view: string) => void
+  /**
    * Registrant hooks compartment: the renderer binds these to
    * useNotices/useLexicon (static absent sources without a session — hook
    * order stays constant).
@@ -541,10 +562,16 @@ export interface InputControlOwnerProps {
   locked: boolean
 }
 
+/** Owner share of the subagent-activity seat: the disable state plus the view-ring switch. */
+export interface ComposerSubagentOwnerProps extends InputControlOwnerProps {
+  /** Switch the session's active view ring tab (the subagent work view). */
+  setView: (view: string) => void
+}
+
 /** Full composer-bar props: standard kit & owner share & control-seat render share & injected share (hooks bound) & locale seat. */
 export type ComposerBarProps =
   PropsRuntime<'conversation.composer.bar'>
-  & PropsRenderSlots<'conversation.input.plan' | 'conversation.input.model'>
+  & PropsRenderSlots<'conversation.input.plan' | 'conversation.input.model' | 'conversation.input.subagent'>
   & InjectFace<ComposerBarInjected>
   & PropsLocale<'conversation'>
 
@@ -705,6 +732,11 @@ export interface ChatViewInjected {
    * absent or the turn produced nothing worth linking.
    */
   fileMentions: (owner: TurnTailOwnerProps) => MarkdownFileMentions | undefined
+  /**
+   * Re-send one prompt text as a queued turn (the failed-round 重新发起
+   * action); send failures surface through the session promptError strip.
+   */
+  resend: (text: string) => void
 }
 
 /** Full chat-view component props: runtime & its Tool/command/tail render shares & store & injected & locale seat. */

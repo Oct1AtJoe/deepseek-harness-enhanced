@@ -36,7 +36,8 @@
   gap: 4px;
   padding: 20px 32px;
   border: 1px solid var(--dsw-alias-border-l2);
-  border-radius: 16px;
+  /* Tech themes square the cubes off through the shared button radius token. */
+  border-radius: var(--dsw-alias-button-radius, 16px);
   background: transparent;
   font: inherit;
   font-size: 14px;

@@ -16,7 +16,11 @@ import type {
 } from '@deepseek-ai/dsh-client-runtime/client'
 import type { ComposerChainProps } from '@deepseek-ai/dsh-client-ui-conversation/client'
 import type { ClientSessionContext, InputTriggerServiceContract, InputTriggerSource } from '@deepseek-ai/dsh-client-ui-input-trigger/client'
-import { SubagentCatalogAction, type SubagentCatalogInjected } from './SubagentCatalogAction.tsx'
+import {
+  SubagentCatalogAction, type SubagentCatalogInjected,
+} from './SubagentCatalogAction.tsx'
+import { SubagentComposerAction, SUBAGENT_VIEW_ID } from './SubagentComposerAction.tsx'
+import { SubagentWorkView, type SubagentWorkViewInjected } from './SubagentWorkView.tsx'
 import {
   SubagentReadOnlyComposer, type SubagentReadOnlyMatch,
 } from './SubagentReadOnlyComposer.tsx'
@@ -33,6 +37,13 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
 export type {
   SubagentCatalogActionProps, SubagentCatalogInjected,
 } from './SubagentCatalogAction.tsx'
+export type {
+  SubagentComposerActionProps,
+} from './SubagentComposerAction.tsx'
+export { SUBAGENT_VIEW_ID } from './SubagentComposerAction.tsx'
+export type {
+  SubagentWorkViewProps, SubagentWorkViewInjected,
+} from './SubagentWorkView.tsx'
 export type {
   SubagentReadOnlyComposerProps, SubagentReadOnlyMatch,
 } from './SubagentReadOnlyComposer.tsx'
@@ -58,6 +69,9 @@ function selectReadOnlySubagent(owner: ComposerChainProps): SubagentReadOnlyMatc
  */
 export function apply(ctx: ClientContext): void {
   ctx.effect(() => ctx.locale.register(NS, { zh, en }), 'ui-subagent: dictionaries')
+  // Registration-time text (the view tab label) reads through the bound
+  // translate as a thunk, so it follows the active locale.
+  const t = ctx.locale.bind(NS)
   const sessions = ctx.sessions
   // Child labels live on the session list (parentId lineage + displayTitle),
   // not the conversation snapshot — the list store is the zero-RPC candidate feed.
@@ -126,4 +140,27 @@ export function apply(ctx: ClientContext): void {
       select: selectReadOnlySubagent,
     }, SubagentReadOnlyComposer),
   )
+
+  // The work view tab, after trajectory in the ring. Clicking a row opens the
+  // child session — the opened conversation IS the work process.
+  ctx.slots.inject('conversation.view', () => ctx.slots.register({
+    name: 'conversation.view',
+    id: SUBAGENT_VIEW_ID,
+    order: 20,
+    locale: NS,
+    label: () => t('view.subagents'),
+    inject: (_parentSessionId: SessionId): SubagentWorkViewInjected => ({
+      openChild(address: SubagentAddress) {
+        sessions.openSubagent(address)
+      },
+      refresh(parentSessionId: SessionId) {
+        void sessions.refreshSubagents(parentSessionId)
+      },
+    }),
+  }, SubagentWorkView))
+  // The composer tool-row seat, right of the access-mode control.
+  ctx.slots.inject('conversation.input.subagent', () => ctx.slots.register({
+    name: 'conversation.input.subagent',
+    locale: NS,
+  }, SubagentComposerAction))
 }

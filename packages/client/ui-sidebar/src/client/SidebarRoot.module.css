@@ -182,7 +182,8 @@
   margin: 0 2px 8px;
   box-sizing: border-box;
   border: 1px solid var(--dsw-alias-border-l2);
-  border-radius: 12px;
+  /* Tech themes square the bar off through the shared button radius token. */
+  border-radius: var(--dsw-alias-button-radius, 12px);
   background: var(--dsw-alias-button-elevated-fill);
   color: var(--dsw-alias-label-primary);
   font-size: 14px;

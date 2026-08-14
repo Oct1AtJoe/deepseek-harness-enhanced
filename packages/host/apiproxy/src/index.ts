@@ -98,6 +98,8 @@ export class ApiProxyService extends Service implements ApiProxy {
     const api = createApiProxy(ctx, {
       defaultModelSelection: () => ctx.agentDefaultModel.currentSelection(),
       saveDefaultModelSelection: selection => ctx.agentDefaultModel.saveSelection(selection),
+      modelEffort: (provider, model) => ctx.agentDefaultModel.modelEffort(provider, model),
+      saveModelEffort: (provider, model, effort) => ctx.agentDefaultModel.saveModelEffort(provider, model, effort),
       cwd: process.cwd(),
       ...config.nativeOpen === undefined ? {} : { canOpenPath: () => config.nativeOpen as boolean },
       ...(config.sessionExportCompressionLevel === undefined

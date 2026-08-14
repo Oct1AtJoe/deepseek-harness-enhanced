@@ -5,7 +5,7 @@
  * ThemePresenter owns after the client plugin tree activates.
  */
 
-import { DEFAULT_PREFERENCE, type ThemePreference } from './theme-settings.ts'
+import { DEFAULT_PREFERENCE, THEME_BOOT_SCHEMES, type ThemePreference } from './theme-settings.ts'
 
 /** Build the inline script for one schema-validated built-in preference. */
 function bootThemeScript(preference: ThemePreference): string {
@@ -14,7 +14,8 @@ function bootThemeScript(preference: ThemePreference): string {
   const systemDark = preference === 'system'
     && typeof matchMedia !== 'undefined'
     && matchMedia('(prefers-color-scheme: dark)').matches
-  const dark = preference === 'dark' || systemDark
+  const bootSchemes = ${JSON.stringify(THEME_BOOT_SCHEMES)}
+  const dark = preference === 'system' ? systemDark : bootSchemes[preference] === 'dark'
   document.documentElement.style.colorScheme = dark ? 'dark' : 'light'
   document.body.toggleAttribute('data-ds-dark-theme', dark)
 })()</script>`

@@ -61,7 +61,7 @@ function treeItems(root: HTMLDivElement | null): HTMLElement[] {
 }
 
 /** Compact token count shared in shape with the conversation stats strip. */
-function formatTokens(value: number): string {
+export function formatTokens(value: number): string {
   const scaled = (next: number): string => next >= 100
     ? String(Math.round(next))
     : String(Math.round(next * 10) / 10)
@@ -71,7 +71,7 @@ function formatTokens(value: number): string {
 }
 
 /** Sum the four disjoint durable provider-usage buckets. */
-function tokenTotal(
+export function tokenTotal(
   usage: SessionProjectionMap['tokenUsage'] | undefined,
 ): number | undefined {
   return usage === undefined
@@ -81,7 +81,7 @@ function tokenTotal(
 }
 
 /** Exact whole-second active-turn duration for one catalog row. */
-function activityDuration(
+export function activityDuration(
   summary: SessionSummary | undefined,
   activity: 'running' | 'inactive',
   now: number,
@@ -106,7 +106,7 @@ interface DurationParts {
   totalHours: number
 }
 
-function splitDuration(ms: number): DurationParts {
+export function splitDuration(ms: number): DurationParts {
   const totalSeconds = Math.floor(Math.max(0, ms) / 1_000)
   const totalMinutes = Math.floor(totalSeconds / 60)
   const totalHours = Math.floor(totalMinutes / 60)
@@ -121,7 +121,7 @@ function splitDuration(ms: number): DurationParts {
 }
 
 /** Format a duration with decreasing visual precision at larger scales. */
-function formatDuration(ms: number, t: TranslateNS<typeof NS>): string {
+export function formatDuration(ms: number, t: TranslateNS<typeof NS>): string {
   const { seconds, minutes, hours, days, totalMinutes, totalHours } = splitDuration(ms)
   if (days >= 365) {
     const years = Math.floor(days / 365)
@@ -159,7 +159,7 @@ function formatDuration(ms: number, t: TranslateNS<typeof NS>): string {
 }
 
 /** Preserve exact whole seconds for hover and accessible naming. */
-function formatExactDuration(ms: number, t: TranslateNS<typeof NS>): string {
+export function formatExactDuration(ms: number, t: TranslateNS<typeof NS>): string {
   const { seconds, minutes, hours, days } = splitDuration(ms)
   return days === 0
     ? formatDuration(ms, t)
@@ -171,7 +171,7 @@ function formatExactDuration(ms: number, t: TranslateNS<typeof NS>): string {
     })
 }
 
-const NO_DESCENDANTS = { count: 0, runningCount: 0 } as const
+export const NO_DESCENDANTS = { count: 0, runningCount: 0 } as const
 
 /** Render the known direct-child shape while its authoritative catalog hydrates. */
 function CatalogLoadingRows({

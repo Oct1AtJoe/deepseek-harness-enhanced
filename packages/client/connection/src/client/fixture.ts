@@ -2179,6 +2179,7 @@ function createFixtureWorld(options: FixtureOptions): FixtureWorld {
   const api: ApiProxy = {
     sessions: {
       list: request => ok(request, { items: [...sessions].sort((a, b) => b.updatedAt - a.updatedAt) }),
+      referenceCandidates: request => ok(request, { candidates: [] }),
       search: (request, signal) => {
         if (signal.aborted) {
           return err(request, {
@@ -3079,6 +3080,7 @@ export class FixtureApiClient extends AbstractApiClient {
     switch (method) {
       case 'session.list': return this.api.sessions.list(request)
       case 'session.search': return this.api.sessions.search(request, signal)
+      case 'session.referenceCandidates': return this.api.sessions.referenceCandidates(request, signal)
       case 'session.create': return this.api.sessions.create(request)
       case 'session.history': return this.api.sessions.history(request)
       case 'session.models': return this.api.sessions.models(request)

@@ -49,7 +49,7 @@ export function InputBar({
   renderSlot, useNotices, useLexicon, useMenuLauncher,
   useProjection, sessionId, variant, disabled: inert = false, blocked,
   workspacePickerOpen = false, onRequestWorkspace,
-  placeholder, accessory, overlay, leftItems, rightItems, footer,
+  placeholder, accessory, overlay, leftItems, rightItems, footer, setView,
 }: InputBarProps) {
   const input = useInput(s => s)
   const notice = useNotices(s => s)
@@ -747,6 +747,7 @@ export function InputBar({
             </Tooltip>
             <div className={css.modes}>
               {accessSelect}
+              {renderSlot('conversation.input.subagent', { locked, setView })}
               {renderSlot('conversation.input.plan', { locked })}
             </div>
             {leftItems}

@@ -2,12 +2,14 @@
  * Serialize harness messages into DeepSeek chat completions. User text is joined; assistant text
  * becomes `content`, tool calls become `tool_calls`, and tool results become separate tool messages.
  * Assistant reasoning is replayed as `reasoning_content` only on tool-call turns, as required by
- * thinking-mode passback. Core image blocks are rejected explicitly because this wire route is text-only;
- * unknown declaration-merged block types retain the adapter's documented extension fallback.
+ * thinking-mode passback. Core image blocks become a text placeholder naming the durable attachment
+ * because this wire route is text-only; the text-only model cannot see pixels but learns an image is
+ * present and can delegate reading it to a vision-capable subagent. Unknown declaration-merged block
+ * types retain the adapter's documented extension fallback.
  * @module dsh-llm-deepseek/serialize
  */
 
-import { contentHasImage, LlmError } from '@deepseek-ai/dsh-llm'
+import { LlmError } from '@deepseek-ai/dsh-llm'
 import type { ContentBlock, GenerateOptions, Message } from '@deepseek-ai/dsh-llm'
 import type { WireMessage, WireRequest, WireTool } from './types.ts'
 
@@ -52,19 +54,34 @@ function resolveThinking(options: GenerateOptions, defaults: RequestDefaults): R
   return defaults.thinking === undefined ? {} : { thinking: defaults.thinking }
 }
 
-/** Join the text blocks of a message (used for user/tool-result content). */
-function flattenText(blocks: ContentBlock[]): string {
-  return blocks
-    .filter(block => block.type === 'text')
-    .map(block => block.text)
-    .join('')
+/**
+ * Render one durable image block as a text placeholder. The text-only wire
+ * route cannot carry pixels; the placeholder keeps the image's identity and
+ * dimensions in the model's view so the model can delegate actual reading to a
+ * vision-capable subagent (the standard image-reader delegation flow).
+ * @param attachment - the durable image reference from the image block.
+ * @returns the placeholder text rendered in the wire message.
+ */
+function imagePlaceholder(attachment: {
+  attachmentId: unknown
+  mediaType: unknown
+  width?: unknown
+  height?: unknown
+  bytes?: unknown
+}): string {
+  const dimensions = attachment.width !== undefined && attachment.height !== undefined
+    ? `, ${String(attachment.width)}x${String(attachment.height)}px`
+    : ''
+  const size = attachment.bytes !== undefined ? `, ${String(attachment.bytes)} bytes` : ''
+  return `[image attachment ${String(attachment.attachmentId)} (${String(attachment.mediaType)}${dimensions}${size})]`
 }
 
-/** Reject core image content before any text-flattening path can silently erase it. */
-function assertTextOnly(blocks: readonly ContentBlock[]): void {
-  if (contentHasImage(blocks)) {
-    throw new LlmError('The DeepSeek chat-completions adapter does not support image content.', 'UNSUPPORTED_CONTENT')
-  }
+/** Join the text blocks of a message, rendering images as placeholders (used for user/tool-result content). */
+function flattenText(blocks: ContentBlock[]): string {
+  return blocks
+    .filter(block => block.type === 'text' || block.type === 'image')
+    .map(block => block.type === 'text' ? block.text : imagePlaceholder(block.attachment))
+    .join('')
 }
 
 /** Serialize one assistant message (text + reasoning + tool calls). */
@@ -112,7 +129,6 @@ function serializeAssistant(message: Message): WireMessage {
 export function serializeMessages(messages: Message[]): WireMessage[] {
   const wire: WireMessage[] = []
   for (const message of messages) {
-    assertTextOnly(message.content)
     if (message.role === 'system') {
       wire.push({ role: 'system', content: flattenText(message.content) })
       continue

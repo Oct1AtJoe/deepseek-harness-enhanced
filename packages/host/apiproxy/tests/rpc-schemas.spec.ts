@@ -239,12 +239,13 @@ describe('sessions domain schemas', () => {
       provider: '',
       model: 'm',
     })).toThrow()
-    expect(() => sessionSelectModelRequestSchema.parse({
+    // An empty effort is the explicit clear signal for a remembered effort.
+    expect(sessionSelectModelRequestSchema.parse({
       sessionId: 's1',
       provider: 'deepseek-official',
       model: 'm',
       reasoningEffort: '',
-    })).toThrow()
+    }).reasoningEffort).toBe('')
     expect(() => sessionModelsValueSchema.parse({
       current: { provider: 'deepseek-official', model: 'm' },
       groups: [{

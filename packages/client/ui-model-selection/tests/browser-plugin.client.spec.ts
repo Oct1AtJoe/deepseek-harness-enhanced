@@ -57,22 +57,39 @@ const GROUPS = [{
 async function bench() {
   const ctx = new Context()
   let current: ModelSelection = { provider: 'deepseek-official', model: 'deepseek-v4-flash' }
+  const groups: typeof GROUPS = GROUPS
+  // The fake Host mirrors the real one: per-route remembered efforts, an
+  // empty effort clearing them, and the adapter default materialized when
+  // no effort applies.
+  const memory = new Map<string, string>()
   const calls = { models: 0, select: 0 }
   ctx.provide('connection', { api: { sessions: {
     models: () => {
       calls.models += 1
       return Promise.resolve({
-        result: { ok: true as const, value: { current, routable, groups: GROUPS, failures: [] } },
+        result: { ok: true as const, value: { current, routable, groups, failures: [] } },
       })
     },
     selectModel: (payload: { provider: string; model: string; reasoningEffort?: string }) => {
       calls.select += 1
+      const route = `${payload.provider}/${payload.model}`
+      let effort = payload.reasoningEffort
+      if (effort === '') {
+        memory.delete(route)
+        effort = undefined
+      } else if (effort === undefined) {
+        effort = memory.get(route)
+      } else {
+        memory.set(route, effort)
+      }
+      if (effort === undefined) {
+        effort = groups.flatMap(group => group.models)
+          .find(model => model.id === payload.model)?.reasoning?.defaultEffort
+      }
       current = {
         provider: payload.provider,
         model: payload.model,
-        ...payload.reasoningEffort === undefined
-          ? {}
-          : { reasoningEffort: payload.reasoningEffort },
+        ...effort === undefined ? {} : { reasoningEffort: effort },
       }
       return Promise.resolve({ result: { ok: true as const, value: { selected: current } } })
     },
@@ -191,6 +208,87 @@ describe('ui-model-selection dual entry', () => {
       provider: 'deepseek-official',
       model: 'deepseek-v4-pro',
       reasoningEffort: 'high',
+    })
+  })
+
+  it('a model\'s chosen effort survives switching away and back through either entry', async () => {
+    const b = await bench()
+    b.mint('s1')
+    const seatFace = b.seat().inject!(sid('s1'))
+    // Choose max for flash through the SEAT entry.
+    expect(await seatFace.select({
+      provider: 'deepseek-official',
+      model: 'deepseek-v4-flash',
+      reasoningEffort: 'max',
+    })).toBe(true)
+    // Switch away and back through the POPUP: flash must come back with max,
+    // not the provider default high.
+    const options = await b.contribution().ui.options(projection('s1'), new AbortController().signal)
+    await b.contribution().ui.onSelect(
+      options.find((o: SelectOption) => o.label === 'DeepSeek-V4-Pro')!,
+      projection('s1'),
+    )
+    expect(b.hostCurrent()).toEqual({
+      provider: 'deepseek-official',
+      model: 'deepseek-v4-pro',
+      reasoningEffort: 'high',
+    })
+    await b.contribution().ui.onSelect(
+      options.find((o: SelectOption) => o.label === 'DeepSeek-V4-Flash')!,
+      projection('s1'),
+    )
+    expect(b.hostCurrent()).toEqual({
+      provider: 'deepseek-official',
+      model: 'deepseek-v4-flash',
+      reasoningEffort: 'max',
+    })
+  })
+
+  it('an empty effort clears the remembered effort back to the adapter default', async () => {
+    const b = await bench()
+    b.mint('s1')
+    const seatFace = b.seat().inject!(sid('s1'))
+    await seatFace.select({
+      provider: 'deepseek-official',
+      model: 'deepseek-v4-flash',
+      reasoningEffort: 'max',
+    })
+    // The provider-default row (models without a configured default) submits
+    // an empty effort, which the Host treats as clearing the memory.
+    await seatFace.select({ provider: 'deepseek-official', model: 'deepseek-v4-flash', reasoningEffort: '' })
+    expect(b.hostCurrent()).toEqual({
+      provider: 'deepseek-official',
+      model: 'deepseek-v4-flash',
+      reasoningEffort: 'high',
+    })
+    // A later bare pick stays on the adapter default instead of resurrecting max.
+    await seatFace.select({ provider: 'deepseek-official', model: 'deepseek-v4-flash' })
+    expect(b.hostCurrent()).toEqual({
+      provider: 'deepseek-official',
+      model: 'deepseek-v4-flash',
+      reasoningEffort: 'high',
+    })
+  })
+
+  it('an effort chosen in one session is what a new session\'s bare pick restores', async () => {
+    const b = await bench()
+    b.mint('a')
+    b.mint('b')
+    await b.seat().inject!(sid('a')).select({
+      provider: 'deepseek-official',
+      model: 'deepseek-v4-flash',
+      reasoningEffort: 'max',
+    })
+    // The Host applies the remembered effort to ANY session's bare pick.
+    const options = await b.contribution().ui.options(projection('b'), new AbortController().signal)
+    await b.contribution().ui.onSelect(
+      options.find((o: SelectOption) => o.label === 'DeepSeek-V4-Flash')!,
+      projection('b'),
+    )
+    expect(b.hostCurrent()).toEqual({
+      provider: 'deepseek-official',
+      model: 'deepseek-v4-flash',
+      reasoningEffort: 'max',
     })
   })
 

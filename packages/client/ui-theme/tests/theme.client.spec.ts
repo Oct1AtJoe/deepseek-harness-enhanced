@@ -29,7 +29,7 @@ describe('ThemeRuntime', () => {
     // jsdom matchMedia is absent; system resolves to light.
     expect(snapshot.active.id).toBe('light')
     expect(snapshot.active.colorScheme).toBe('light')
-    expect(snapshot.themes.map(t => t.id)).toEqual(['light', 'dark'])
+    expect(snapshot.themes.map(t => t.id)).toEqual(['light', 'dark', 'aurora', 'nebula'])
   })
 
   it('setTheme switches, writes through the scope, republishes, and keeps DOM untouched', () => {
@@ -46,6 +46,28 @@ describe('ThemeRuntime', () => {
     theme.setTheme('dark')
     expect(events).toHaveLength(1)
     expect(host.set).toHaveBeenCalledOnce()
+  })
+
+  it('aurora is a built-in theme: dark scheme, violet tokens, persisted preference', () => {
+    const { theme, host } = make()
+    theme.setTheme('aurora')
+    expect(theme.getTheme().preference).toBe('aurora')
+    expect(theme.getTheme().active.colorScheme).toBe('dark')
+    expect(theme.getTheme().active.tokens['--dsw-alias-brand-primary']).toMatch(/^rgb\(/)
+    expect(theme.getTheme().active.tokens['--dsw-alias-bg-base']).toMatch(/^rgb\(/)
+    expect(host.set).toHaveBeenCalledWith('preference', 'aurora')
+  })
+
+  it('nebula is a built-in theme: dark scheme, pixel button tokens, persisted preference', () => {
+    const { theme, host } = make()
+    theme.setTheme('nebula')
+    expect(theme.getTheme().preference).toBe('nebula')
+    expect(theme.getTheme().active.colorScheme).toBe('dark')
+    expect(theme.getTheme().active.tokens['--dsw-alias-button-primary-bg']).toContain('linear-gradient')
+    expect(theme.getTheme().active.tokens['--dsw-alias-button-primary-fill']).toMatch(/^rgb\(/)
+    expect(theme.getTheme().active.tokens['--dsw-alias-button-glow']).toContain('inset')
+    expect(theme.getTheme().active.tokens['--dsw-alias-button-press-shift']).toContain('translate')
+    expect(host.set).toHaveBeenCalledWith('preference', 'nebula')
   })
 
   it('adopts a published Host section without writing it back', () => {
@@ -75,14 +97,14 @@ describe('ThemeRuntime', () => {
   it('registered themes join the snapshot; disposing the active one resets to default', () => {
     const { theme, events, host } = make()
     const dispose = theme.register({ id: 'sepia', colorScheme: 'light', tokens: { '--dsw-alias-bg-base': 'red' } })
-    expect(theme.getTheme().themes.map(t => t.id)).toEqual(['light', 'dark', 'sepia'])
+    expect(theme.getTheme().themes.map(t => t.id)).toEqual(['light', 'dark', 'aurora', 'nebula', 'sepia'])
     theme.setTheme('sepia')
     expect(theme.getTheme().active.tokens['--dsw-alias-bg-base']).toBe('red')
     dispose()
     expect(theme.getTheme().preference).toBe('system')
-    expect(theme.getTheme().themes.map(t => t.id)).toEqual(['light', 'dark'])
+    expect(theme.getTheme().themes.map(t => t.id)).toEqual(['light', 'dark', 'aurora', 'nebula'])
     // Custom ids are in-process extension themes; only the built-in product
-    // preferences cross the Host settings schema.
+    // preferences (light/dark/aurora/nebula/system) cross the Host settings schema.
     expect(host.set).not.toHaveBeenCalled()
     // register + set + dispose = three publishes; disposer is idempotent.
     expect(events.length).toBe(3)

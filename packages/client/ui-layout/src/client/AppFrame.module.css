@@ -5,6 +5,10 @@
   height: 100%;
   overflow: hidden;
   background: var(--dsw-alias-bg-base);
+  /* Tech themes layer aurora gradient pools over the app surface through
+     --dsw-alias-bg-app-image (default none; declared after the shorthand
+     because `background:` resets the image). */
+  background-image: var(--dsw-alias-bg-app-image, none);
   /* Collapse/expand animates the tracks on the deepsuite sider curve
      (--ds-ease-in-out / --ds-transition-duration-slow, ui-theme base.css). */
   transition: grid-template-columns var(--ds-transition-duration-slow) var(--ds-ease-in-out);

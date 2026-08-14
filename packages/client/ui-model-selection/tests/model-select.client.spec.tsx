@@ -82,6 +82,46 @@ describe('ModelSelect reasoning effort', () => {
     })
   })
 
+  it('submits an empty effort when the provider-default row restores default behavior', async () => {
+    const groups = [{
+      id: 'provider',
+      name: 'Provider',
+      models: [{
+        id: 'model',
+        name: 'Model',
+        reasoning: { efforts: [{ id: 'standard', name: 'Standard' }] },
+      }],
+    }]
+    const directory = createSnapshotStore<ModelDirectoryState>(state({
+      groups,
+      current: { provider: 'provider', model: 'model', reasoningEffort: 'standard' },
+    }))
+    const select = vi.fn(async (selection: ModelSelection) => {
+      directory.set(state({ groups, current: selection }))
+      return true
+    })
+    render(<ModelSelect
+      locked={false}
+      available
+      directory={directory}
+      load={vi.fn()}
+      select={select}
+      t={t}
+    />)
+
+    fireEvent.click(screen.getByRole('button', { name: /选择模型/ }))
+    fireEvent.click(screen.getByRole('menuitem', { name: /推理等级/ }))
+    fireEvent.click(screen.getByRole('menuitemradio', { name: /Default/ }))
+    await waitFor(() => {
+      // The Host treats the empty effort as clearing the route's memory.
+      expect(select).toHaveBeenCalledWith({
+        provider: 'provider',
+        model: 'model',
+        reasoningEffort: '',
+      })
+    })
+  })
+
   it('offers provider default only when the adapter does not configure a model default', () => {
     const directory = createSnapshotStore(state({
       groups: [{

@@ -217,6 +217,22 @@ describe('conversation slot inject API', () => {
     await b.runtime.dispose()
   })
 
+  it('resend (chat view face) re-sends the failed-round text as a queued turn and swallows send failure', async () => {
+    const b = await bench()
+    const { injected } = b.chatViewApi(ROOT)
+    injected.resend('retry the task')
+    await vi.waitFor(() => {
+      expect(b.sessionFake.prompt).toHaveBeenCalledWith([{ type: 'text', text: 'retry the task' }], 'queue')
+    })
+    // Send failure surfaces through the snapshot promptError strip; the
+    // resend callback swallows the rejection (nothing to restore).
+    b.sessionFake.prompt.mockResolvedValueOnce({ ok: false, error: { code: 'agent-busy', message: 'b', details: { reason: 'b' } } })
+    injected.resend('retry again')
+    await new Promise(resolve => setTimeout(resolve, 0))
+    expect(b.sessionFake.prompt).toHaveBeenCalledTimes(2)
+    await b.runtime.dispose()
+  })
+
   it('openDetails (chat view face) writes the selection through the store actions and opens the panel', async () => {
     const b = await bench()
     const { instance, injected } = b.chatViewApi(ROOT)

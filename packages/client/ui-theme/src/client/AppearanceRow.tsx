@@ -1,13 +1,14 @@
 /**
  * Appearance preference row registered into the General section item slot
- * (figma 501:30012 'Frame 2117131228'): title + three preference cubes.
+ * (figma 501:30012 'Frame 2117131228'): title + preference cubes (the base
+ * pair, the aurora and nebula variants, and system).
  * Registered by this package — the theme feature owns its own settings
  * surface. Selection follows the persisted preference, never the resolved
  * active theme.
  */
 import clsx from 'clsx'
 import {
-  IconDarkOutline16, IconFollowsystemOutline16, IconLightOutline16,
+  IconDarkOutline16, IconFollowsystemOutline16, IconLightOutline16, IconSparkle16, IconThinkOutline16,
 } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { PropsLocale, PropsRuntime, PropsStore } from '@deepseek-ai/dsh-client-ui-slots'
 import type { ThemePreference } from '../theme-settings.ts'
@@ -27,10 +28,14 @@ export type AppearanceRowComponentProps =
   PropsRuntime<'settings.general.item'> & PropsStore<ReturnType<typeof createAppearanceRowStore>>
   & PropsLocale<'settings.theme'> & AppearanceRowInjected
 
-/** Cube order and icons (figma 501:30015-30017: Light, Dark, System). */
+/** Cube order and icons (figma 501:30015-30017: Light, Dark, System; aurora
+ * is the product's violet variant — sparkle glyph; nebula the deep-space
+ * tech variant — orbit glyph, both dark-palette semantics). */
 const CUBES: readonly { id: ThemePreference; labelKey: ThemeKey; Icon: typeof IconLightOutline16 }[] = [
   { id: 'light', labelKey: 'appearance.light', Icon: IconLightOutline16 },
   { id: 'dark', labelKey: 'appearance.dark', Icon: IconDarkOutline16 },
+  { id: 'aurora', labelKey: 'appearance.aurora', Icon: IconSparkle16 },
+  { id: 'nebula', labelKey: 'appearance.nebula', Icon: IconThinkOutline16 },
   { id: 'system', labelKey: 'appearance.system', Icon: IconFollowsystemOutline16 },
 ]
 

@@ -1,11 +1,12 @@
 /**
  * Browser theme registry over the `--dsw-*` token stylesheets. The service
- * owns the live theme preference (light/dark/system), resolves `system` through
- * `prefers-color-scheme`, and publishes immutable snapshots; it never touches
- * the DOM — ui-layout's presenter consumes the resolved snapshot. The Host
- * settings scope loads and stores the preference in the user-settings
- * document. The plugin also registers the Appearance preference row into the
- * settings General section — the theme feature owns its own settings surface.
+ * owns the live theme preference (light/dark/aurora/nebula/system), resolves
+ * `system` through `prefers-color-scheme`, and publishes immutable
+ * snapshots; it never touches the DOM — ui-layout's presenter consumes the
+ * resolved snapshot. The Host settings scope loads and stores the preference
+ * in the user-settings document. The plugin also registers the Appearance
+ * preference row into the settings General section — the theme feature owns
+ * its own settings surface.
  */
 import type { Context } from '@deepseek-ai/cordis'
 import type { BoundActions } from '@deepseek-ai/dsh-client-ui-slots'
@@ -17,6 +18,8 @@ import type {} from '@deepseek-ai/dsh-client-ui-settings/client'
 import type {} from '@deepseek-ai/dsh-client-locale/client'
 import type { AppearanceRowInjected } from './AppearanceRow.tsx'
 import { AppearanceRow } from './AppearanceRow.tsx'
+import { AURORA_TOKENS } from './aurora.ts'
+import { NEBULA_TOKENS } from './nebula.ts'
 import { createAppearanceRowStore } from './settings-store.ts'
 import { en, zh, type ThemeKey } from './locales.ts'
 import {
@@ -118,6 +121,13 @@ declare module '@deepseek-ai/cordis' {
 const BUILTIN_THEMES: readonly ThemeDefinition[] = Object.freeze([
   Object.freeze({ id: 'light', colorScheme: 'light' as const, tokens: Object.freeze({}) }),
   Object.freeze({ id: 'dark', colorScheme: 'dark' as const, tokens: Object.freeze({}) }),
+  // Aurora: the product's violet variant — alias-token overrides over the
+  // dark base palette, registered as a built-in so it survives reloads and
+  // shows in the Appearance row like the base pair.
+  Object.freeze({ id: 'aurora', colorScheme: 'dark' as const, tokens: AURORA_TOKENS }),
+  // Nebula: the deep-space tech variant — violet-blue surfaces, aurora
+  // gradient pools, and gradient/glow button effects via the effect tokens.
+  Object.freeze({ id: 'nebula', colorScheme: 'dark' as const, tokens: NEBULA_TOKENS }),
 ])
 
 const BUILTIN_INSPECT_TOKENS: readonly ThemeTokenInspection[] = Object.freeze([
@@ -137,9 +147,11 @@ const BUILTIN_INSPECT_TOKENS: readonly ThemeTokenInspection[] = Object.freeze([
 ])
 
 /**
- * Theme registry and preference owner. `light`/`dark` are built in (the base
- * stylesheets carry both palettes); third-party themes register alias-layer
- * overrides. Reads go through {@link getTheme}; preference writes only
+ * Theme registry and preference owner. `light`/`dark`/`aurora`/`nebula` are
+ * built in (light/dark are the unmodified base palettes; aurora overlays a
+ * violet token set on the dark base, nebula a deep-space gradient set with
+ * button effects); third-party themes register alias-layer overrides. Reads
+ * go through {@link getTheme}; preference writes only
  * through {@link setTheme}; continuous sync only through the `theme/change`
  * event. {@link overrideTokens} stacks partial token layers over the active
  * theme without touching the registry.

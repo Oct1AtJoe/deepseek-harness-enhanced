@@ -4,10 +4,12 @@ English | [中文](README.zh.md)
 
 The deployment default used when an entry point creates an Agent that has no session-local model selection. `AgentDefaultModelConfig` provides `ctx.agentDefaultModel`; direct entry points such as `dsh --profile headless` and Host-backed entry points such as ApiProxy read the same service instead of owning parallel provider/model defaults.
 
-The plugin config requires `{ provider, model }`. That composition entry is the base of the `agent-default-model` Settings section; a mounted settings provider layers the user's choice over it and changes are visible on the next `currentSelection()` read. `reasoningEffort` belongs to the Settings section but deliberately not to plugin config: a complete saved selection can clear an effort when the next selected model has none, while a composition value would be inherited again.
+The plugin config requires `{ provider, model }`. That composition entry is the base of the `agent-default-model` Settings section; a mounted settings provider layers the user's choice over it and changes are visible on the next `currentSelection()` read. `reasoningEffort` belongs to the Settings section but deliberately not to plugin config: a complete saved selection can clear an effort when the next selected model has none, while a composition value would be inherited again. The section also carries an `efforts` map (`"provider/model": effort`): the last accepted effort per route, applied by `currentSelection()` when the stored selection names none — so a model's chosen effort follows it into every newly created Agent.
 
-- `ctx.agentDefaultModel.currentSelection()` returns a detached `{ provider, model, reasoningEffort? }` selection for a newly created Agent.
-- `ctx.agentDefaultModel.saveSelection(selection)` saves the complete user selection. Without a settings provider it is a no-op and the composition entry remains current.
+- `ctx.agentDefaultModel.currentSelection()` returns a detached `{ provider, model, reasoningEffort? }` selection for a newly created Agent, composing the route's remembered `efforts` entry when the stored selection names no effort.
+- `ctx.agentDefaultModel.saveSelection(selection)` saves the complete user selection, preserving the `efforts` map. Without a settings provider it is a no-op and the composition entry remains current.
+- `ctx.agentDefaultModel.modelEffort(provider, model)` reads a route's remembered effort.
+- `ctx.agentDefaultModel.saveModelEffort(provider, model, effort?)` records or clears a route's remembered effort. Without a settings provider it is a no-op.
 
 The service does not validate catalog membership. A provider route may serve an unadvertised model, and the consumer that actually opens a model request owns availability diagnostics.
 

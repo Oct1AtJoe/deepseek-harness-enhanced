@@ -184,8 +184,9 @@ export class DeepSeekAdapter extends LlmAdapter {
     return Promise.resolve({
       // The chat-completions wire route is text-only regardless of catalog
       // membership, so the uncatalogued fallback declares the same negative
-      // capability — "unknown" here would let the host accept and persist
-      // images the serializer must then reject.
+      // capability. The serializer renders any persisted image block as a
+      // text placeholder, so a session can keep image attachments even on
+      // this route; the model just cannot see pixels directly.
       ...configured === undefined
         ? { provider, id: model, name: model, inputModalities: ['text' as const] }
         : modelInfo(provider, configured),

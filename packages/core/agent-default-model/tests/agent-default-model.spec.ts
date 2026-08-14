@@ -95,4 +95,35 @@ describe('AgentDefaultModelConfig', () => {
     expect(ctx.agentDefaultModel.currentSelection()).toEqual({ provider: 'p', model: 'm' })
     await ctx.fiber.dispose()
   })
+
+  it('applies the remembered per-route effort when the stored selection names none', async () => {
+    const bench = await boot()
+    await bench.defaultModel.saveModelEffort('deepseek-official', 'deepseek-v4-flash', 'max')
+    // The composition entry carries no effort, so the remembered one applies.
+    expect(bench.defaultModel.currentSelection()).toEqual({
+      provider: 'deepseek-official', model: 'deepseek-v4-flash', reasoningEffort: 'max',
+    })
+    // An explicit stored effort wins over the memory.
+    await bench.defaultModel.saveSelection({
+      provider: 'deepseek-official', model: 'deepseek-v4-flash', reasoningEffort: ReasoningEffortId('high'),
+    })
+    expect(bench.defaultModel.currentSelection()).toEqual({
+      provider: 'deepseek-official', model: 'deepseek-v4-flash', reasoningEffort: 'high',
+    })
+    expect(bench.defaultModel.modelEffort('deepseek-official', 'deepseek-v4-flash')).toBe('max')
+    await bench.ctx.fiber.dispose()
+  })
+
+  it('clears a remembered effort and preserves the memory across default saves', async () => {
+    const bench = await boot()
+    await bench.defaultModel.saveModelEffort('deepseek-official', 'deepseek-v4-flash', 'max')
+    // Saving a new default keeps the per-route memory intact.
+    await bench.defaultModel.saveSelection({ provider: 'acme-gateway', model: 'acme-large' })
+    expect(bench.defaultModel.modelEffort('deepseek-official', 'deepseek-v4-flash')).toBe('max')
+    // Clearing the memory restores the plain composition entry.
+    await bench.defaultModel.saveModelEffort('deepseek-official', 'deepseek-v4-flash', undefined)
+    expect(bench.defaultModel.modelEffort('deepseek-official', 'deepseek-v4-flash')).toBeUndefined()
+    expect(bench.defaultModel.currentSelection()).toEqual({ provider: 'acme-gateway', model: 'acme-large' })
+    await bench.ctx.fiber.dispose()
+  })
 })
