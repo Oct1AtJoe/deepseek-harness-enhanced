@@ -1,10 +1,34 @@
-# DeepSeek Harness
+# DeepSeek Harness Enhanced
 
 [English](README.md) | 中文
+
+> **本地增强分支。** 本检出为官方 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) master（快照 `47f94385`，2026-08-13）叠加 2026-08-14 加入的本地定制。功能清单、重放步骤与合并冲突指引见 [CUSTOM-FEATURES.md](CUSTOM-FEATURES.md)。远程仓库：https://github.com/Oct1AtJoe/deepseek-harness-enhanced
 
 DeepSeek Harness（`dsh`）是由 [DeepSeek AI](https://deepseek.com) 开发的开源 agent harness（智能体框架）。
 
 它采用**一切皆插件**的架构，并由 [Cordis](https://github.com/cordiverse/cordis) 驱动，其设计参见论文 [_A Programming Paradigm for Spatiotemporal Composability_](https://github.com/cordiverse/paper)。
+
+## 本地增强（2026-08-14）
+
+在官方 master 之上的定制功能。已插件化的功能在上游同步时零冲突；其余为包内小改动，按 [CUSTOM-FEATURES.md](CUSTOM-FEATURES.md) 重放：
+
+- **per-model 思考程度记忆** — 切换模型不再把思考程度重置为适配器默认；新会话继承记忆。
+- **失败轮重发按钮** — 失败的助手回复旁新增刷新动作，一键重发该轮文本（`@deepseek-ai/dsh-client-ui-resend-failed-round` 插件）。
+- **图片发送开放** — deepseek 适配器不再拒绝图片内容。
+- **子智能体 tab 与计数** — 子智能体工作视图 tab + 输入区带运行数量徽标的按钮。
+- **跨工作区会话引用** — `@` 触发会话候选与注入的引用会话上下文（`ui-session-reference` 插件）。
+- **产物文件 diff 统计** — 文件 chip 显示 `+N -M` 并可展开本轮改动（`@deepseek-ai/dsh-client-ui-deliverables-custom` fork）。
+- **aurora / nebula 主题** — 带光晕的科技风主题与圆角像素风按钮。
+- **桌面壳** — Electron 封装（`desktop/`），启动或挂接 `dsh web`。
+
+### 同步上游
+
+```powershell
+powershell -File scripts/upstream-sync.ps1
+git push origin master
+```
+
+脚本下载官方 master tarball，提交到 `upstream-master` 镜像线，再合并进 `master`。冲突仅限 CUSTOM-FEATURES.md 中列出的包内定制点。
 
 ## 开发者预览
 
@@ -27,8 +51,8 @@ npx @deepseek-ai/dsh web
 如需从仓库源码运行：
 
 ```sh
-git clone https://github.com/deepseek-ai/deepseek-harness.git
-cd deepseek-harness
+git clone https://github.com/Oct1AtJoe/deepseek-harness-enhanced.git
+cd deepseek-harness-enhanced
 pnpm install
 pnpm run build
 pnpm dsh web
