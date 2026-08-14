@@ -11,7 +11,7 @@
 | 1. per-model 思考程度记忆 | **留在官方包内**（agent-default-model + apiproxy） | 中（~110 行） |
 | 2. 对话失败重试按钮 | **已插件化**：`ui-resend-failed-round` 新包挂官方 `assistant-actions` 操作条 | 零（ui-conversation 已还原官方；注意按钮位置移到**助手回复**操作条） |
 | 3. 移除图片发送限制 | **留在官方包内**（llm-deepseek serialize/adapter） | 小（~79 行） |
-| 4. 子智能体 tab + 计数按钮 | **组件部分已插件**（ui-subagent 包内新文件，零冲突）；ui-conversation 的席位注册点仍在官方包内 | 小（~90 行，席位声明/apply） |
+| 4. 子智能体 tab + 计数按钮 | **已插件化**：tab 注册官方 `conversation.view` 环；按钮注册官方 `conversation.input.right` 席位（工具行 send 旁），视图切换经 conversation service。仅 view-switch 基础设施留在源码 | 小（~43 行，service 的 setView/registerViewSwitcher——官方无视图切换 API） |
 | 5. 引用其他工作区会话 | **插件姿势**（新包 ui-session-reference + apiproxy RPC）；挂载行已移到 profile patch | apiproxy RPC 部分（~120 行） |
 | 6. 产物 +N -M 统计 + 展开 | **已插件化**：fork 为 `ui-deliverables-custom`，官方行禁用 | 零（官方 ui-deliverables 已还原） |
 | 7. 展开面板重设计 | **已插件化**（随 6 一起在 custom 包）；DiffBlock 的两个可选 prop 仍在官方 ui-primitives | 小（~32 行 DiffBlock props） |
