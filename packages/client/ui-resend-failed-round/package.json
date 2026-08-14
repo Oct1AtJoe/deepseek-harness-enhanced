@@ -7,7 +7,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/Oct1AtJoe/deepseek-harness-local.git",
+    "url": "git+https://github.com/Oct1AtJoe/deepseek-harness-enhanced.git",
     "directory": "packages/client/ui-resend-failed-round"
   },
   "type": "module",
