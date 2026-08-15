@@ -35,3 +35,4 @@ Node 侧注册静态系统提示词段落 `ui:deliverable-file-references`。它
 - **提及匹配只认精确路径或唯一 basename。**后缀式提及（`out/index.html` 写作 `index.html` 可解析；`deep/out/index.html` 写作 `out/index.html` 则不行）保持不可点击；等真实的收尾消息形态产生需求后再放宽匹配规则。
 - **终端命令间接创建的文件仍不在匹配词表内。**除非某个成功修改位置也记录了该路径，否则在行内代码中点名这类文件不会使其可点击。
 - **原生文件夹交接以 Host 桌面为目标。**经非 loopback 权威访问的浏览器会省略该操作，报告没有原生打开器的部署也一样。若 SSH 转发让远端 Host 看似处于本机 loopback，部署必须为网关设置 `nativeOpen: false`；无界面的 macOS／Windows Host、Windows interop 不可用的 WSL，或 display／opener 探测误报的 Linux 桌面也必须这样配置。识别操作者实际可见的桌面仍属于部署策略。
+- **内置 `DiffBlock` 副本。**展开面板需要 `showPathHeaders`／`showFooter` 两个 chrome 开关，因此本包自带 `src/client/DiffBlock.tsx` 副本（连同其 module CSS 与 spec），官方 `ui-primitives` 的 DiffBlock 保持上游不变。上游 DiffBlock 的修复需同步应用到该副本。
