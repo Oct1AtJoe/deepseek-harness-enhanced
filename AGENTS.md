@@ -1,5 +1,46 @@
 # AGENTS.md
 
+## Global agent rules
+
+These rules apply to every task in this repository.
+
+### 1. Requirement confirmation (mandatory, highest priority)
+
+If the user's requirement is unclear, or you do not understand it, confirm with the user promptly before acting. **Never guess.** One confirmation costs less than rework from a wrong guess.
+
+Confirm when the requirement is vague, self-contradictory, or missing key context; when several plausible interpretations materially change the approach; or when the desired result is unknown. Procedure:
+
+1. Restate your understanding in one sentence.
+2. List the assumptions and open points that affect the implementation.
+3. Offer two or three options or targeted questions.
+4. Wait for confirmation before implementing.
+
+Exception: facts directly verifiable from the repository (interface signatures, existing implementations) are not open points; verify them yourself and declare any remaining assumption in your reply.
+
+### 2. Coding standards
+
+- Minimal: prefer deletion over addition and boring over clever; add no unrequested dependencies, abstractions, or boilerplate.
+- Reuse first: existing code before the standard library, the standard library before installed dependencies, installed dependencies before new dependencies.
+- Follow the repository's existing conventions: directory structure, naming, strict typing, error handling, lint, and formatting.
+
+### 3. Testing and quality
+
+- Every behavior change carries tests; run the relevant tests and the build before committing.
+- Run lint or fix only on files this change touches; never fix the whole repository indiscriminately.
+
+### 4. Commits and code review
+
+- Small commits, one topic each; commit messages follow Conventional Commits and state the motivation.
+- PRs stay independent and traceable with no unrelated changes mixed in.
+
+### 5. Documentation
+
+- Behavior or interface changes update the affected README, JSDoc, and related documentation in the same change.
+
+### 6. Security
+
+- Never commit secrets, tokens, or .env files. Confirm with the user before destructive operations (delete, overwrite, push).
+
 DeepSeek Harness is a plugin-based agent harness on vendored Cordis: **everything is a plugin**. Read [docs/architecture.md](docs/architecture.md) before changing `packages/`; follow [docs/AGENTS.md](docs/AGENTS.md) for documentation.
 
 ## Pre-release stance: foundation over blast radius
