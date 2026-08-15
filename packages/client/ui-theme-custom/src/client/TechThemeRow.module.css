@@ -1,5 +1,6 @@
-/* Appearance row (figma 'Frame 2117131228': title + cube row, column gap 8,
- * pad 16/0, hairline separator; the section column strips it when last). */
+/* Tech-theme row (mirrors the official Appearance row: title + cube row,
+ * column gap 8, pad 16/0, hairline separator; the section column strips it
+ * when last). */
 
 .group {
   display: flex;
@@ -23,9 +24,9 @@
   flex-wrap: wrap;
 }
 
-/* Appearance cube (figma '.Selector Cube' 276x82 r16, pad 20/32, centered
+/* Theme cube (figma '.Selector Cube' 276x82 r16, pad 20/32, centered
  * icon-over-label column, gap 4); flexed down from the figma width so all
- * three sit on one row in the 800 panel, wrapping when narrower. */
+ * cubes sit on one row in the 800 panel, wrapping when narrower. */
 .themeCube {
   box-sizing: border-box;
   flex: 1 1 180px;

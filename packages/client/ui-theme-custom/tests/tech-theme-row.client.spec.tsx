@@ -1,22 +1,20 @@
 // @vitest-environment jsdom
-/** AppearanceRow behavior: three cubes, selection follows the persisted
+/** TechThemeRow behavior: two cubes, selection follows the persisted
  * preference, clicks drive setTheme. */
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { createSnapshotStore, type SessionListState, type WorkspaceListState } from '@deepseek-ai/dsh-client-runtime/client'
 import { bindSnapshotSelector } from '@deepseek-ai/dsh-client-web-react'
-import { AppearanceRow } from '../src/client/AppearanceRow.tsx'
-import type { AppearanceRowComponentProps } from '../src/client/AppearanceRow.tsx'
-import { createAppearanceRowStore } from '../src/client/settings-store.ts'
-import type { ThemePreference } from '../src/client/index.ts'
+import { TechThemeRow, type TechThemeRowProps } from '../src/client/TechThemeRow.tsx'
+import { createTechThemeStore } from '../src/client/settings-store.ts'
+import type { ThemePreference } from '@deepseek-ai/dsh-client-ui-theme/client'
 
 afterEach(cleanup)
 
 const COPY: Record<string, string> = {
-  'appearance.title': 'Appearance',
-  'appearance.light': 'Light',
-  'appearance.dark': 'Dark',
-  'appearance.system': 'System',
+  'tech-theme.title': 'Tech themes',
+  'tech-theme.aurora': 'Aurora',
+  'tech-theme.nebula': 'Nebula',
 }
 
 /** Empty global standard-kit hooks (the row reads neither). */
@@ -35,10 +33,10 @@ function emptyWorkspaces() {
 
 function mount(preference: ThemePreference = 'system') {
   // Real store instance — the sanctioned zero-machinery path for tests.
-  const store = createAppearanceRowStore().create()
+  const store = createTechThemeStore().create()
   store.actions.sync(preference, 0)
   const setTheme = vi.fn()
-  const props: AppearanceRowComponentProps = {
+  const props: TechThemeRowProps = {
     useSessions: emptySessions(),
     useWorkspaces: emptyWorkspaces(),
     useStore: bindSnapshotSelector(store),
@@ -46,30 +44,39 @@ function mount(preference: ThemePreference = 'system') {
     t: (key: string) => COPY[key] ?? key,
     setTheme,
   }
-  render(<AppearanceRow {...props} />)
+  render(<TechThemeRow {...props} />)
   return { store, setTheme }
 }
 
 const pressed = (name: RegExp): string | null =>
   screen.getByRole('button', { name }).getAttribute('aria-pressed')
 
-describe('AppearanceRow', () => {
-  it('renders the title and three cubes with the preference cube selected', () => {
-    mount('dark')
-    expect(screen.getByText('Appearance')).toBeDefined()
-    expect(pressed(/Dark/)).toBe('true')
-    expect(pressed(/Light/)).toBe('false')
-    expect(pressed(/System/)).toBe('false')
+describe('TechThemeRow', () => {
+  it('renders the title and two cubes with the persisted cube selected', () => {
+    mount('nebula')
+    expect(screen.getByText('Tech themes')).toBeDefined()
+    expect(pressed(/Nebula/)).toBe('true')
+    expect(pressed(/Aurora/)).toBe('false')
   })
 
-  it('click drives setTheme; selection follows the store mirror, not the click echo', () => {
-    const b = mount('dark')
-    fireEvent.click(screen.getByRole('button', { name: /Light/ }))
-    expect(b.setTheme).toHaveBeenCalledWith('light')
-    // No store write yet: selection is unchanged.
-    expect(pressed(/Dark/)).toBe('true')
-    act(() => { b.store.actions.sync('light', 1) })
-    expect(pressed(/Light/)).toBe('true')
-    expect(pressed(/Dark/)).toBe('false')
+  it('leaves both cubes unselected for an official preference', () => {
+    mount('dark')
+    expect(pressed(/Aurora/)).toBe('false')
+    expect(pressed(/Nebula/)).toBe('false')
+  })
+
+  it('cube clicks drive setTheme with the theme id', () => {
+    const b = mount('system')
+    fireEvent.click(screen.getByRole('button', { name: /Aurora/ }))
+    expect(b.setTheme).toHaveBeenCalledWith('aurora')
+    fireEvent.click(screen.getByRole('button', { name: /Nebula/ }))
+    expect(b.setTheme).toHaveBeenCalledWith('nebula')
+  })
+
+  it('selection follows the store mirror, not the click echo', () => {
+    const b = mount('system')
+    act(() => { b.store.actions.sync('aurora', 1) })
+    expect(pressed(/Aurora/)).toBe('true')
+    expect(pressed(/Nebula/)).toBe('false')
   })
 })

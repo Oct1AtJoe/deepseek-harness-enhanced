@@ -2,14 +2,17 @@
 /**
  * ui-theme-custom registration contract: the aurora and nebula themes join
  * the official registry snapshot on mount, select/persist like built-ins,
- * and leave the registry on fiber teardown (HMR safety). Driven against a
- * real ThemeRuntime so the assertions cover the actual registry projection.
+ * leave the registry on fiber teardown (HMR safety), and the drift keyframes
+ * ride a runtime style element that teardown removes. Driven against a real
+ * ThemeRuntime so the assertions cover the actual registry projection.
  */
 import { afterEach, describe, expect, it } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
 import { stubSettingsScope, type StubSettingsScope } from '@deepseek-ai/dsh-client-test-runtime'
+import { SlotRegistry } from '@deepseek-ai/dsh-client-runtime/client'
 import type { ThemeSettings } from '@deepseek-ai/dsh-client-ui-theme/client'
 import { ThemeRuntime } from '@deepseek-ai/dsh-client-ui-theme/client'
+import { apply as applyLocale, inject as localeInject } from '@deepseek-ai/dsh-client-locale/client'
 import { apply, inject } from '../src/client/index.ts'
 
 let theme: ThemeRuntime
@@ -17,12 +20,23 @@ let host: StubSettingsScope<ThemeSettings>
 /** Mounted fibers, disposed together in afterEach so no spec leaves a live registration. */
 const fibers: { dispose: () => Promise<void> }[] = []
 
-/** Mount the plugin against a real registry with a stubbed durable scope. */
+/** Mount the plugin over the slot registry, locale, and a stubbed durable scope. */
 async function mount(): Promise<{ dispose: () => Promise<void> }> {
   const ctx = new Context()
   host = stubSettingsScope<ThemeSettings>()
   theme = new ThemeRuntime(ctx, host.scope)
+  await ctx.plugin(SlotRegistry).await()
+  ctx.slots.register({
+    name: 'root',
+    children: {
+      'settings.general.item': { kind: 'list', scope: 'root' },
+    },
+  } as never, () => null)
+  ctx.provide('connection', { api: { settings: {} }, isLoopback: false } as never)
+  ctx.provide('remote', { $on: () => () => {} } as never)
+  ctx.provide('settingsScope', { bind: () => stubSettingsScope().scope } as never)
   ctx.provide('theme', theme)
+  await ctx.plugin({ inject: localeInject, apply: applyLocale }).await()
   const fiber = ctx.plugin({ inject: [...inject], apply })
   await fiber.await()
   const handle = { dispose: () => fiber.dispose() }

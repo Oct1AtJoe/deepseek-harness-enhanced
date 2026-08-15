@@ -5,8 +5,6 @@ export const zh = {
   'appearance.title': '外观',
   'appearance.light': '浅色',
   'appearance.dark': '深色',
-  'appearance.aurora': '极光',
-  'appearance.nebula': '星云',
   'appearance.system': '跟随系统',
 } satisfies Record<string, string>
 
@@ -18,7 +16,5 @@ export const en = {
   'appearance.title': 'Appearance',
   'appearance.light': 'Light',
   'appearance.dark': 'Dark',
-  'appearance.aurora': 'Aurora',
-  'appearance.nebula': 'Nebula',
   'appearance.system': 'System',
 } satisfies Record<ThemeKey, string>
