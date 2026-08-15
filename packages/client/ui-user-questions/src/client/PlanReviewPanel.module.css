@@ -27,6 +27,7 @@
   border: 1px solid var(--dsw-alias-state-warn-secondary);
   border-radius: 20px;
   background: var(--dsw-specific-input-major);
+  backdrop-filter: var(--dsw-alias-glass-blur, none);
   box-shadow: var(--dsw-shadow-lv2);
   color: var(--dsw-alias-label-primary);
   /* Elevated surface in dark: the plan body inside scrolls once the card hits

@@ -8,6 +8,9 @@
   width: 100%;
   min-height: 0;
   overflow: hidden;
+  /* No backdrop-filter: the details view hosts fixed-positioned tooltips
+     (timeline rows, toolbar); a non-none filter would anchor them to this
+     panel instead of the viewport. */
   background: var(--dsw-alias-bg-layer-1);
   container-type: inline-size;
 }

@@ -75,6 +75,15 @@ describe('ui-theme-custom theme registration', () => {
     expect(theme.getTheme().themes.map(t => t.id)).toEqual(['light', 'dark'])
   })
 
+  it('injects the button-drift keyframes and removes them on teardown', async () => {
+    const mounted = await mount()
+    const tag = document.head.querySelector('style[data-ui-theme-custom-keyframes]')
+    expect(tag).not.toBeNull()
+    expect(tag?.textContent).toContain('dsh-button-drift')
+    await mounted.dispose()
+    expect(document.head.querySelector('style[data-ui-theme-custom-keyframes]')).toBeNull()
+  })
+
   it('disposing the active custom theme resets the preference to default', async () => {
     const mounted = await mount()
     theme.setTheme('aurora')

@@ -22,6 +22,7 @@
   border: 1px solid var(--dsw-alias-border-l2-darkmode-thin);
   border-radius: 20px;
   background: var(--dsw-specific-input-major);
+  backdrop-filter: var(--dsw-alias-glass-blur, none);
   box-shadow: var(--dsw-shadow-lv2);
   color: var(--dsw-alias-label-primary);
   overflow: hidden;
