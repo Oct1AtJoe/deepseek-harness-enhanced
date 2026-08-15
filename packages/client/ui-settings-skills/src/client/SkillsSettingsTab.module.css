@@ -215,7 +215,10 @@
   border: 1px solid var(--dsw-alias-border-l2);
   border-radius: 999px;
   padding: 0;
-  background: var(--dsw-alias-bg-layer-1);
+  /* Off track is a fixed mid-neutral: the white knob must stay visible on
+     every theme, and the alias layer surfaces go translucent under the glass
+     themes. */
+  background: var(--dsw-static-neutral-bluish-600);
   cursor: pointer;
 }
 
@@ -244,12 +247,13 @@
   width: 12px;
   height: 12px;
   border-radius: 999px;
-  background: var(--dsw-alias-label-tertiary);
+  /* Static white, like the send arrow: the knob keeps its identity on the
+     glass surfaces instead of taking the theme's text or surface tone. */
+  background: var(--dsw-static-neutral-bluish-00);
 }
 
 .switch[data-on='true'] .switchKnob {
   left: 14px;
-  background: var(--dsw-alias-label-on-brand);
 }
 
 .cardDetails {

@@ -111,7 +111,10 @@
   width: 20px;
   height: 10px;
   border-radius: 5px;
-  background: var(--dsw-alias-border-l2);
+  /* Off track is a fixed mid-neutral: the white thumb must stay visible on
+     every theme, and the alias surfaces go translucent under the glass
+     themes (border-l2 is near-white in dark, hiding the thumb entirely). */
+  background: var(--dsw-static-neutral-bluish-600);
   transition: background-color 120ms var(--ds-ease-in-out);
 }
 
@@ -122,7 +125,9 @@
   width: 6px;
   height: 6px;
   border-radius: 50%;
-  background: var(--dsw-alias-bg-layer-1);
+  /* Static white, like the send arrow: the thumb keeps its identity on the
+     glass surfaces instead of taking the layer surface tone. */
+  background: var(--dsw-static-neutral-bluish-00);
   transition: transform 120ms var(--ds-ease-in-out);
 }
 
