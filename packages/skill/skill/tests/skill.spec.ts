@@ -1268,4 +1268,36 @@ describe('SkillRegistry scoped layers', () => {
     expect(await ctx.skills.list({ scope })).toEqual([])
     await preset.dispose()
   })
+
+  it('applies, clears, and validates runtime invocation overrides', async () => {
+    const ctx = new Context()
+    await ctx.plugin(SkillRegistry)
+    const provider = new MemoryProvider([memorySkill('togglable', 'Togglable', 100)])
+    registerProvider(ctx, provider)
+    const changes = vi.fn()
+    ctx.on('skills/change', changes)
+
+    const disabled = { modelInvocable: false, userInvocable: true } as const
+    ctx.skills.setInvocationOverride('togglable', disabled)
+    expect((await ctx.skills.list()).find(skill => skill.name === 'togglable')?.invocation).toEqual(disabled)
+    expect((await ctx.skills.get('togglable'))?.invocation).toEqual(disabled)
+    expect(changes).toHaveBeenCalled()
+
+    // An override for an absent name is accepted and applies once the skill appears.
+    ctx.skills.setInvocationOverride('later-skill', { modelInvocable: true, userInvocable: false })
+    provider.replace([memorySkill('togglable', 'Togglable', 100), memorySkill('later-skill', 'Later', 100)])
+    expect((await ctx.skills.get('later-skill'))?.invocation)
+      .toEqual({ modelInvocable: true, userInvocable: false })
+
+    ctx.skills.setInvocationOverride('togglable', undefined)
+    expect((await ctx.skills.list()).find(skill => skill.name === 'togglable')?.invocation)
+      .toEqual({ modelInvocable: true, userInvocable: true })
+    expect(() => ctx.skills.setInvocationOverride('togglable', {
+      modelInvocable: 'no' as unknown as boolean,
+      userInvocable: true,
+    })).toThrow('invocation override for skill "togglable"')
+    // The failed validation left the cleared override in place.
+    expect((await ctx.skills.get('togglable'))?.invocation)
+      .toEqual({ modelInvocable: true, userInvocable: true })
+  })
 })

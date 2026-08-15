@@ -22,6 +22,8 @@
   - tablist "插件视图":
     - tab "插件配置" [selected]
     - tab "插件列表"
+    - tab "技能"
+    - tab "子智能体"
   - tabpanel "插件配置":
     - list:
       - listitem:

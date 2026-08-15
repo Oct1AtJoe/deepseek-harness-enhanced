@@ -365,6 +365,8 @@ export class SkillRegistry extends Service {
     () => { this.invalidateCache() },
   )
   private readonly collectCache = new Map<string, Map<string, IndexedCandidate>>()
+  /** Global runtime invocation overrides keyed by skill name; win over provider policy at projection. */
+  private readonly invocationOverrides = new Map<string, SkillInvocationPolicy>()
   private revision = 0
   private nextProviderOrder = 0
   /** Stable identities for cache keys; scope keys are opaque identity-compared objects. */
@@ -483,7 +485,7 @@ export class SkillRegistry extends Service {
     const collected = await this.collect(options)
     return {
       skills: [...collected.entries.values()]
-        .map(entry => toSummary(entry.candidate))
+        .map(entry => applyInvocationOverride(toSummary(entry.candidate), this.invocationOverrides.get(entry.candidate.name)))
         .sort(compareSkillSummary),
       complete: collected.cacheable,
     }
@@ -514,7 +516,28 @@ export class SkillRegistry extends Service {
       this.invalidateEntry(match)
       return undefined
     }
+    const effective = this.invocationOverrides.get(definition.name)
+    if (effective !== undefined) return { ...definition, invocation: effective }
     return definition
+  }
+
+  /**
+   * Set or clear a runtime invocation override for one skill name. The
+   * override wins over every provider-declared policy at list and get
+   * projection; passing `undefined` restores the provider policy. A name with
+   * no catalog entry is accepted and applies once such a skill appears.
+   * Overrides live in this registry's global layer only.
+   * @param name - kebab-case skill name.
+   * @param policy - effective invocation policy, or `undefined` to clear.
+   */
+  setInvocationOverride(name: string, policy: SkillInvocationPolicy | undefined): void {
+    if (policy === undefined) {
+      if (!this.invocationOverrides.delete(name)) return
+    } else {
+      validateInvocation(policy, `invocation override for skill "${name}"`)
+      this.invocationOverrides.set(name, policy)
+    }
+    this.invalidateCache()
   }
 
   private async collect(options: SkillViewOptions): Promise<CollectResult> {
@@ -778,6 +801,12 @@ function toSummary(skill: SkillDefinition | SkillCandidate): SkillSummary {
     provider,
     ...resourceBase !== undefined ? { resourceBase } : {},
   }
+}
+
+/** Replace a summary's invocation with a live override, keeping the summary immutable. */
+function applyInvocationOverride(summary: SkillSummary, override: SkillInvocationPolicy | undefined): SkillSummary {
+  if (override === undefined) return summary
+  return { ...summary, invocation: override }
 }
 
 function validateInvocation(invocation: unknown, subject: string): void {

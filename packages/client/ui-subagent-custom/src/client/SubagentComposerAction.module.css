@@ -1,0 +1,60 @@
+/* Composer subagent seat: a compact 28px square chip beside the access-mode
+ * control — robot avatar with a live running-count badge (ongoing blue). */
+.button {
+  position: relative;
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--dsw-alias-label-tertiary);
+  cursor: pointer;
+}
+
+.button:hover:not(:disabled),
+.button:focus-visible:not(:disabled) {
+  background: var(--dsw-alias-interactive-bg-hover);
+  color: var(--dsw-alias-label-secondary);
+}
+
+.button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.avatar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.live {
+  color: var(--dsw-static-deepseek-450);
+}
+
+/* Running-count badge: 12px pill, deepseek-500 fill so white text clears
+ * 4.5:1 at 10px (450 drops to ~3.6:1); the dot beside it keeps 450. */
+.badge {
+  position: absolute;
+  top: -4px;
+  right: -5px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 15px;
+  height: 15px;
+  box-sizing: border-box;
+  padding: 0 3px;
+  border-radius: 999px;
+  background: var(--dsw-static-deepseek-500);
+  color: var(--dsw-static-neutral-bluish-00);
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 15px;
+  font-variant-numeric: tabular-nums;
+}

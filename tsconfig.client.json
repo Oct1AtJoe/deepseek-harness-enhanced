@@ -74,6 +74,7 @@
     { "path": "./packages/client/ui-commands" },
     { "path": "./packages/client/ui-skill" },
     { "path": "./packages/client/ui-subagent" },
+    { "path": "./packages/client/ui-subagent-custom" },
     { "path": "./packages/client/ui-resend-failed-round" },
     { "path": "./packages/client/ui-session-reference" },
     { "path": "./packages/client/ui-jobs" },
@@ -94,6 +95,8 @@
     { "path": "./packages/client/ui-settings-general" },
     { "path": "./packages/client/ui-settings-models" },
     { "path": "./packages/client/ui-settings-plugin-inventory" },
+    { "path": "./packages/client/ui-settings-skills" },
+    { "path": "./packages/client/ui-settings-subagents" },
     { "path": "./packages/client/locale" },
     { "path": "./packages/client/web" },
     { "path": "./apps/web" }

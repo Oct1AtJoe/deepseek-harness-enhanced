@@ -94,6 +94,11 @@
     - id: plugin-inventory
       name: '@deepseek-ai/dsh-host-plugin-inventory'
 
+    # Skill catalog management Remote: browse, inspect, and persist invocation
+    # overrides (the Web Skills tab's data plane).
+    - id: skill-manager
+      name: '@deepseek-ai/dsh-host-skill-manager'
+
     # The API gateway: the transport-agnostic dispatch face every client shape
     # shares. The base layer's agent-default-model service owns the default model.
     - id: api-gateway
@@ -194,6 +199,12 @@
 
     - id: ui-settings-plugin-inventory
       name: '@deepseek-ai/dsh-client-ui-settings-plugin-inventory'
+
+    - id: ui-settings-skills
+      name: '@deepseek-ai/dsh-client-ui-settings-skills'
+
+    - id: ui-settings-subagents
+      name: '@deepseek-ai/dsh-client-ui-settings-subagents'
 
     - id: ui-conversation
       name: '@deepseek-ai/dsh-client-ui-conversation'
