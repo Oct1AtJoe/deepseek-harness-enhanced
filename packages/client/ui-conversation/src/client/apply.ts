@@ -242,13 +242,8 @@ export function apply(ctx: Context): void {
       'conversation.view': { kind: 'list', scope: 'session' },
     },
     store: chatStore,
-    inject: (sessionId: SessionId, actions: BoundActions<typeof chatStore>): ConversationSessionInjected => {
+    inject: (sessionId: SessionId, _actions: BoundActions<typeof chatStore>): ConversationSessionInjected => {
       const conversation = concreteConversation(ctx)
-      // The view-ring switch the composer's tool-row seats reach through the
-      // conversation service (the bar holds no store seat; this registration
-      // does). Idempotent per render, stale only for sessions that stopped
-      // rendering — which can no longer be clicked for.
-      conversation.registerViewSwitcher(sessionId, actions.setView)
       return {
         views,
         releaseSessionImages: (id) => { conversation.releaseSessionImages(id) },
