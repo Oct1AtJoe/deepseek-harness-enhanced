@@ -56,3 +56,6 @@ packages/util/output-retention/src/*.js
 packages/util/output-retention/src/*.js.map
 packages/util/output-retention/src/*.d.ts
 packages/util/output-retention/src/*.d.ts.map
+
+# Local runtime logs
+logs/
