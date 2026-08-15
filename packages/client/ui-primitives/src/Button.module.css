@@ -38,15 +38,18 @@
 }
 
 .primary {
-  /* --dsw-alias-button-primary-bg carries the tech themes' gradient fill
-     (fallback: the solid fill token, which other components consume as
+  /* --dsw-alias-button-primary-bg carries the tech themes' glass gradient
+     fill (fallback: the solid fill token, which other components consume as
      accent-color/background and must stay color-safe); background-size and
      motion gate the drift animation, glow rides box-shadow. Base palettes
-     leave the effect tokens unset, so light/dark/aurora keep the flat look. */
+     leave the effect tokens unset, so light/dark/aurora keep the flat look.
+     The glass blur rides the theme's backdrop-filter token — a button has no
+     fixed-positioned descendants, so it never traps a popover. */
   background: var(--dsw-alias-button-primary-bg, var(--dsw-alias-button-primary-fill));
   background-size: var(--dsw-alias-button-primary-bg-size, auto);
   box-shadow: var(--dsw-alias-button-glow, none);
   animation: var(--dsw-alias-button-primary-motion, none);
+  backdrop-filter: var(--dsw-alias-glass-blur, none);
   color: var(--dsw-alias-label-primary-foreground);
 }
 
@@ -89,6 +92,9 @@
 
 .toolbar {
   background: var(--dsw-alias-button-tool-bar-fill);
+  /* Glass chip: tech themes give the translucent fill a hairline + soft glow
+     through the outline token (inert `none` in the base palettes). */
+  box-shadow: var(--dsw-alias-button-outline-glow, none);
 }
 
 .toolbar:hover:not(:disabled) {

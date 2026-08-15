@@ -28,6 +28,7 @@
   padding: 4px 5px 4px 12px;
   border: 1px solid var(--dsw-alias-border-l1);
   border-radius: 12px;
+  /* No backdrop-filter: action buttons inside host fixed-positioned tooltips. */
   background: var(--dsw-specific-tip);
 }
 

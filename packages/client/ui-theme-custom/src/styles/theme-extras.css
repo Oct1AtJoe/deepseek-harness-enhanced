@@ -1,0 +1,14 @@
+/* Gradient drift consumed by the tech themes' primary buttons through
+   --dsw-alias-button-primary-motion (background-size 200% + drift keeps the
+   gradient flowing; the themes gate it, the base palettes default to `none`). */
+@keyframes dsh-button-drift {
+  0% {
+    background-position: 0% 50%;
+  }
+  50% {
+    background-position: 100% 50%;
+  }
+  100% {
+    background-position: 0% 50%;
+  }
+}

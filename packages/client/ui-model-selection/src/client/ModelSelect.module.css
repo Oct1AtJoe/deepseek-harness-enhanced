@@ -78,6 +78,7 @@
   border: 1px solid var(--dsw-alias-border-inverted);
   border-radius: 12px;
   background: var(--dsw-specific-menu);
+  backdrop-filter: var(--dsw-alias-glass-blur, none);
   box-shadow: var(--dsw-shadow-lv3);
   color: var(--dsw-alias-label-primary);
   /* Elevated surface: the scrollbar thumb takes the l2 elevation tokens.

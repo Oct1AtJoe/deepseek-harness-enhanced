@@ -68,6 +68,8 @@
      l2-darkmode-thin pair. Fill: the input surface token (elevated in dark). */
   border: 1px solid var(--dsw-alias-border-l2-darkmode-thin);
   border-radius: 22px;
+  /* No backdrop-filter: the card hosts fixed-positioned tooltips; a non-none
+     filter would anchor them to the card instead of the viewport. */
   background: var(--dsw-specific-input-major);
   box-shadow: var(--dsw-shadow-lv2);
   font-size: 16px;
@@ -380,11 +382,12 @@
 
 /* Primary send (figma IconButton 34:10465): 34px circle, #3964FE light /
    #679EFE dark — the info-fill pair (500→400), NOT button-primary (ink);
-   white glyph; empty text = 0.4 opacity. Tech themes overlay a gradient
-   (--dsw-alias-button-info-bg), square the circle off via the shared radius
-   token, and ride the shared glow/press effect tokens; the fill color stays
-   as the underlay so the base palettes keep the flat circle. `background-image`
-   sits after the `background` shorthand because the shorthand resets it. */
+   white glyph; empty text = 0.4 opacity. Tech themes swap in a translucent
+   glass gradient (--dsw-alias-button-info-bg) as the whole background, blur
+   the backdrop behind the circle, square it off via the shared radius token,
+   and ride the shared glow/press effect tokens; the solid fill stays as the
+   fallback so the base palettes keep the flat circle. `background` prefers
+   the gradient token; the shorthand fallback keeps the fill color-safe. */
 .primary {
   display: grid;
   place-items: center;
@@ -393,27 +396,31 @@
   height: 34px;
   border: none;
   border-radius: var(--dsw-alias-button-radius, 999px);
-  background: var(--dsw-alias-button-info-fill);
-  background-image: var(--dsw-alias-button-info-bg, none);
+  background: var(--dsw-alias-button-info-bg, var(--dsw-alias-button-info-fill));
   background-size: var(--dsw-alias-button-primary-bg-size, auto);
   /* Static white, not the foreground token: the arrow stays white on the blue
      fill in both themes (design 34:10465). */
   color: #fff;
   box-shadow: var(--dsw-alias-button-glow, none);
   animation: var(--dsw-alias-button-primary-motion, none);
+  /* Glass circle: blur the backdrop behind the translucent gradient. The
+     send button has no fixed-positioned descendants, so the filter cannot
+     trap a popover. */
+  backdrop-filter: var(--dsw-alias-glass-blur, none);
   cursor: pointer;
   transition: background-color 100ms ease, box-shadow 100ms ease;
   /* Opts out of the row's 2px downward shift (.row top pad): the send circle
      keeps its original seat while the smaller chips sit lower. Transform, not
      margin, so flex centering math is untouched. Tech themes override the
      whole transform through the shift tokens, so the -2px seat survives the
-     pixel press. */
+     glass press. */
   transform: var(--dsw-alias-button-send-shift, translateY(-2px));
 }
 
 .primary:hover:not(:disabled) {
-  /* background-color only — the shorthand would reset the gradient image. */
-  background-color: var(--dsw-alias-button-info-hover);
+  /* Whole-background swap — the gradient token is the tech-theme surface,
+     the solid hover fill the base fallback (both color-safe). */
+  background: var(--dsw-alias-button-info-bg-hover, var(--dsw-alias-button-info-hover));
   box-shadow: var(--dsw-alias-button-glow-hover, var(--dsw-alias-button-glow, none));
 }
 

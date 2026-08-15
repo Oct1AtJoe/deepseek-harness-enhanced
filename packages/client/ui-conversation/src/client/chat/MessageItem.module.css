@@ -19,6 +19,9 @@
 .bubble {
   /* 525px cap inside the 736 column; percentage keeps narrow windows sane. */
   max-width: 100%;
+  /* No backdrop-filter: the bubble hosts fixed-positioned tooltips (copy/
+     branch actions), which a non-none filter would anchor inside the bubble
+     instead of the viewport. Glass reads through the translucent fill. */
   background: var(--dsw-specific-bubble);
   border-radius: 22px;
   /* 44px single-line bubble: 24 line + 10 vertical padding each side. */

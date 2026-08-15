@@ -25,5 +25,7 @@
   display: flex;
   justify-content: center;
   overflow: hidden;
+  /* No backdrop-filter: onboarding steps may host fixed-positioned tooltips;
+     a non-none filter would anchor them to this stage instead of the viewport. */
   background: var(--dsw-alias-bg-layer-1);
 }

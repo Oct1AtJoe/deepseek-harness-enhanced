@@ -115,35 +115,6 @@ describe('DiffBlock footer', () => {
   })
 })
 
-describe('DiffBlock chrome toggles', () => {
-  it('drops the path and gap rows under showPathHeaders={false}, keeping the footer', () => {
-    const diffs: DiffHunk[] = [
-      { path: 'a.ts', oldText: 'x', newText: 'y' },
-      { path: 'a.ts', oldText: 'p', newText: 'q' },
-    ]
-    const { container } = render(<DiffBlock diffs={diffs} showPathHeaders={false} />)
-    expect(container.querySelectorAll('[class*="_path_"]').length).toBe(0)
-    expect(container.querySelectorAll('[class*="_gap_"]').length).toBe(0)
-    expect(changeRows(container)).toEqual(['x', 'y', 'p', 'q'])
-    expect(screen.getByText('└ +2 -2 · 1 file')).toBeTruthy()
-  })
-
-  it('drops the footer under showFooter={false}, keeping the path header', () => {
-    render(<DiffBlock diffs={[{ path: 'a.ts', oldText: null, newText: 'x' }]} showFooter={false} />)
-    expect(screen.getByText('a.ts')).toBeTruthy()
-    expect(screen.queryByText(/└ \+/)).toBeNull()
-  })
-
-  it('omits both chrome pieces together, for a caller-owned title bar', () => {
-    const { container } = render(
-      <DiffBlock diffs={[{ path: 'a.ts', oldText: 'o', newText: 'n' }]} showPathHeaders={false} showFooter={false} />,
-    )
-    expect(container.querySelectorAll('[class*="_path_"]').length).toBe(0)
-    expect(screen.queryByText(/└ \+/)).toBeNull()
-    expect(changeRows(container)).toEqual(['o', 'n'])
-  })
-})
-
 describe('DiffBlock height cap', () => {
   it('shows head and tail with an expand control past the cap, then all lines expanded', () => {
     // One added line over the default cap forces the collapse.

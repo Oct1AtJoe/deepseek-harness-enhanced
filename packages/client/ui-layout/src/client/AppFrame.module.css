@@ -30,6 +30,11 @@
   min-width: 0;
   overflow: hidden;
   background: var(--dsw-specific-sidebar-fill);
+  /* No backdrop-filter here: a non-none value would make this column the
+     containing block of every position:fixed descendant, and the sidebar
+     hosts the settings dialog and tooltips — they must anchor to the
+     viewport, not to the 280px column. The nebula glass look relies on the
+     translucent fill alone. */
   border-right: 1px solid var(--dsw-alias-border-l1);
 }
 

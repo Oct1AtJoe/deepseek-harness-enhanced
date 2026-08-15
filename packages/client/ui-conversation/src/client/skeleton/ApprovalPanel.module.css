@@ -20,6 +20,7 @@
   border: 1px solid var(--dsw-alias-state-warn-secondary);
   border-radius: 20px;
   background: var(--dsw-specific-input-major);
+  backdrop-filter: var(--dsw-alias-glass-blur, none);
   box-shadow: var(--dsw-shadow-lv2);
   /* Elevated surface in dark, same as the menus: `.body` inside scrolls once
      the justification or command passes the cap, so the thumb takes the l2

@@ -31,6 +31,7 @@
   width: 100%;
   padding: 2px 0;
   border-radius: 12px 12px 0 0;
+  /* No backdrop-filter: row actions inside host fixed-positioned tooltips. */
   background: var(--dsw-specific-tip);
   --dsh-scrollbar-thumb: var(--dsw-alias-scrollbar-bg-l2);
   --dsh-scrollbar-thumb-hover: var(--dsw-alias-scrollbar-hover-l2);

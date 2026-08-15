@@ -16,6 +16,7 @@
   border: 1px solid var(--dsw-alias-border-inverted);
   border-radius: 12px;
   background: var(--dsw-specific-menu);
+  backdrop-filter: var(--dsw-alias-glass-blur, none);
   box-shadow: var(--dsw-shadow-lv3);
   /* Elevated surface: the scrollbar thumb takes the l2 elevation tokens. The
      declaration sits on the card rather than on `.scrollable .viewport`
