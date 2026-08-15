@@ -43,7 +43,7 @@ describe('pi-ai request context conversion', () => {
     expect(toPiContext({ ...base, tools: [] })).toEqual({ messages: [] })
   })
 
-  it('converts complete text-only history and rejects nested images without storage', () => {
+  it('converts complete text-only history and renders nested images as placeholders', () => {
     const callId = CallId('call-1')
     expect(toPiContext(request([
       history('system', [{ type: 'text', text: 'history system' }]),
@@ -73,11 +73,25 @@ describe('pi-ai request context conversion', () => {
       ],
     })
 
-    expect(() => toPiContext(request([user([{
+    // The text-only path keeps the image's identity as a placeholder instead
+    // of rejecting or silently erasing it.
+    const placeholder = `[image attachment ${ref.attachmentId} (image/png, 1x1px, 1 bytes)]`
+    const nested = toPiContext(request([user([{
       type: 'tool-result',
       toolCallId: callId,
       content: [{ type: 'image', attachment: ref }],
-    }])]))).toThrow(/durable attachment service/)
+    }])]))
+    expect(JSON.stringify(nested)).toContain(placeholder)
+  })
+
+  it('renders user image blocks as placeholders on the text-only path', () => {
+    const placeholder = `[image attachment ${ref.attachmentId} (image/png, 1x1px, 1 bytes)]`
+    const context = toPiContext(request([
+      user([{ type: 'text', text: 'look: ' }, { type: 'image', attachment: ref }]),
+    ]))
+    expect(context.messages).toEqual([
+      { role: 'user', content: `look: ${placeholder}`, timestamp: 0 },
+    ])
   })
 
   it('resolves user and tool-result images while preserving explicit fallbacks', async () => {

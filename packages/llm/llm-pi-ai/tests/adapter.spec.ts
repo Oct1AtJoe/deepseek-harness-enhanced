@@ -254,6 +254,27 @@ describe('PiAiAdapter provider routing', () => {
     expect(server.paths).toEqual(['/v1/responses'])
   })
 
+  it('accepts an image message for a text-only model as a placeholder, without the attachment service', async () => {
+    const server = await mockServer([{ events: textEvents }])
+    const ctx = await harness(server.url)
+    const result = await assemble(ctx, {
+      model: 'deepseek-v4-flash',
+      messages: [createUserMessage({
+        content: [
+          { type: 'text', text: 'look at this: ' },
+          { type: 'image', attachment: IMAGE_REF },
+        ],
+        source: { kind: 'plugin', plugin: 'test' },
+      })],
+    })
+    expect(result.message.content).toEqual([{ type: 'text', text: 'hello' }])
+    expect(result.finish).toEqual({ kind: 'stop' })
+    // The wire request carries the placeholder naming the durable attachment,
+    // never pixels and never a rejection.
+    expect(JSON.stringify(server.requests[0]))
+      .toContain(`[image attachment ${IMAGE_REF.attachmentId} (image/png, 1x1px, 1 bytes)]`)
+  })
+
   it('forces one wire request for an SDK-retryable provider failure', async () => {
     const server = await mockServer([
       {
@@ -765,20 +786,13 @@ describe('provider profile lifecycle', () => {
     expect(new LlmError('x', 'X')).toBeInstanceOf(Error)
   })
 
-  it('rejects unsupported or unresolved image input before provider I/O', async () => {
+  it('rejects unresolved image input before provider I/O for vision models, accepts it as a placeholder for text-only models', async () => {
     const adapter = adapterOf({ openai: {}, deepseek: {} })
     const drain = async (options: Parameters<PiAiAdapter['stream']>[0]): Promise<void> => {
       for await (const _chunk of adapter.stream(options)) { /* drain */ }
     }
 
-    await expect(drain({
-      provider: 'deepseek',
-      model: 'deepseek-v4-flash',
-      messages: [createUserMessage({
-        content: [{ type: 'image', attachment: IMAGE_REF }],
-        source: { kind: 'plugin', plugin: 'test' },
-      })],
-    })).rejects.toMatchObject({ code: 'UNSUPPORTED_CONTENT' })
+    // A vision model without the durable resolver still refuses.
     await expect(drain({
       provider: 'openai',
       model: 'gpt-4.1',

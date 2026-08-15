@@ -54,11 +54,12 @@
 - **来源会话**：`--E-vibeCoding-chat--/session-bf136f58…`（"移除图片发送限制"）
 - **需求**：模型不支持图片时提示"不支持"，去掉该限制（用户侧有子智能体委派识图兜底）。
 - **改动文件**：
-  - `packages/llm/llm-deepseek/src/serialize.ts`、`src/adapter.ts` — 图片序列化不再按模型能力拒绝。
+  - `packages/llm/llm-deepseek/src/serialize.ts`、`src/adapter.ts` — 图片序列化不再按模型能力拒绝；图片块渲染为**文本占位符**（`[image attachment <id> (<mediaType>, WxHpx, N bytes)]`，模型得知有图、可委派识图子智能体）。
   - `packages/host/apiproxy/src/api-proxy.ts` — 图片准入不再报"不支持"。
-  - 测试：`packages/llm/llm-deepseek/tests/serialize.spec.ts`、`packages/host/apiproxy/tests/api-proxy-models.spec.ts`。
-- **验证**：对应包测试 + `test:gui`。
-- **重放难度**：中高。llm-deepseek 是上游核心 adapter，升级后 serialize 逻辑很可能被改，需按 diff 重放。
+  - **`packages/llm/llm-pi-ai`（2026-08-16 补）**：同一占位符语义扩展到 pi-ai 路由（文本模态模型发图不再抛 `UNSUPPORTED_CONTENT`）。`src/adapter.ts` — 无图模型含图消息走文本路径（不要求 durable 附件服务），有图模型路径不变；`src/context.ts` — `textOnlyContext` 不再拒绝图片，`flattenText`/`toolResultText` 的 image 块渲染占位符（文案与 llm-deepseek 一致）。保留：pi-ai 的助手结构化图片输出（replay.ts）与有图模型缺附件服务的拒绝。
+  - 测试：`packages/llm/llm-deepseek/tests/serialize.spec.ts`、`packages/host/apiproxy/tests/api-proxy-models.spec.ts`、`packages/llm/llm-pi-ai/tests/{adapter,context,convert}.spec.ts`。
+- **验证**：对应包测试（pi-ai 212/212）+ `test:gui`。
+- **重放难度**：中高。llm-deepseek 与 llm-pi-ai 都是上游核心 adapter，升级后 serialize/context 逻辑很可能被改，需按 diff 重放。
 - **注意**：同会话还修复了 `~/.dsh/settings.yaml` 的 `agent-presets.default`（standard-xiaomi → standard）并删除 `.agent-presets/standard-xiaomi/`——这是用户级配置，不在仓库内，升级不受影响。
 
 ## 4. 子智能体 tab + 输入区计数按钮

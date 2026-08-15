@@ -300,11 +300,14 @@ export class PiAiAdapter extends LlmAdapter {
 
     try {
       const containsImage = options.messages.some(message => contentHasImage(message.content))
-      if (containsImage && !model.input.includes('image')) {
-        throw new LlmError(`pi-ai model "${model.id}" does not support image input`, 'UNSUPPORTED_CONTENT')
-      }
-      const attachments = containsImage ? this.config.resolveAttachments?.() : undefined
-      if (containsImage && attachments === undefined) {
+      // A model without the image modality still accepts the message: the
+      // text-only context path renders image blocks as placeholders naming
+      // the durable attachment, so the session keeps its images and the model
+      // can delegate actual reading to a vision-capable subagent. Only a
+      // vision model needs the durable byte resolver.
+      const needsAttachments = containsImage && model.input.includes('image')
+      const attachments = needsAttachments ? this.config.resolveAttachments?.() : undefined
+      if (needsAttachments && attachments === undefined) {
         throw new LlmError('pi-ai image input requires the durable attachment service', 'UNSUPPORTED_CONTENT')
       }
       const context = attachments === undefined

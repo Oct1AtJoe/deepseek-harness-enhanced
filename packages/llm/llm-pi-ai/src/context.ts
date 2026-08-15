@@ -10,20 +10,45 @@ import type { AttachmentStore } from '@deepseek-ai/dsh-attachment'
 import type { Context as PiContext, ImageContent, Message as PiMessage, TextContent, Tool as PiTool } from '@earendil-works/pi-ai'
 import { toPiAssistant } from './replay.ts'
 
-/** Join the text blocks of a harness message. */
+/**
+ * Render one durable image block as a text placeholder. The text-only path
+ * cannot carry pixels; the placeholder keeps the image's identity and
+ * dimensions in the model's view so the model can delegate actual reading to a
+ * vision-capable subagent (the standard image-reader delegation flow). Wording
+ * matches llm-deepseek's placeholder so the model sees one stable shape.
+ * @param attachment - the durable image reference from the image block.
+ * @returns the placeholder text rendered in the wire message.
+ */
+function imagePlaceholder(attachment: {
+  attachmentId: unknown
+  mediaType: unknown
+  width?: unknown
+  height?: unknown
+  bytes?: unknown
+}): string {
+  const dimensions = attachment.width !== undefined && attachment.height !== undefined
+    ? `, ${String(attachment.width)}x${String(attachment.height)}px`
+    : ''
+  const size = attachment.bytes !== undefined ? `, ${String(attachment.bytes)} bytes` : ''
+  return `[image attachment ${String(attachment.attachmentId)} (${String(attachment.mediaType)}${dimensions}${size})]`
+}
+
+/** Join the text blocks of a harness message, rendering images as placeholders. */
 function flattenText(message: Message): string {
   return message.content
-    .filter(block => block.type === 'text')
-    .map(block => block.text)
+    .filter(block => block.type === 'text' || block.type === 'image')
+    .map(block => block.type === 'text' ? block.text : imagePlaceholder(block.attachment))
     .join('')
 }
 
 
-/** Flatten text recursively inside one tool result. */
+/** Flatten text recursively inside one tool result, rendering images as placeholders. */
 function toolResultText(blocks: readonly ContentBlock[]): string {
   return blocks.map(block => block.type === 'text'
     ? block.text
-    : block.type === 'tool-result' ? toolResultText(block.content) : '').join('')
+    : block.type === 'tool-result' ? toolResultText(block.content)
+      : block.type === 'image' ? imagePlaceholder(block.attachment)
+        : '').join('')
 }
 
 async function userContent(
@@ -88,9 +113,6 @@ function textOnlyContext(options: GenerateOptions): PiContext {
   const toolNames = new Map<CallId, string>()
   const messages: PiMessage[] = []
   for (const message of options.messages) {
-    if (contentHasImage(message.content)) {
-      throw new LlmError('pi-ai image conversion requires the durable attachment service', 'UNSUPPORTED_CONTENT')
-    }
     if (message.role === 'system') {
       messages.push({ role: 'user', content: flattenText(message), timestamp: 0 })
       continue
