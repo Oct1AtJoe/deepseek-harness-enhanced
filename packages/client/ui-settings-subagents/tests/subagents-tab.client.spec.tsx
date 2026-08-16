@@ -1,130 +1,244 @@
 // @vitest-environment jsdom
-/** SubagentsSettingsTab behavior: roster assembly, open/stop actions, empty state, and auto-pull. */
-import { afterEach, describe, expect, it, vi } from 'vitest'
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
-import { createSnapshotStore, type SessionId, type SessionListState, type SessionSummary, type SubagentAddress } from '@deepseek-ai/dsh-client-runtime/client'
-import { bindSnapshotSelector } from '@deepseek-ai/dsh-client-web-react'
-import { SubagentsSettingsTab } from '../src/client/SubagentsSettingsTab.tsx'
+/** SubagentsSettingsTab behavior: backend directory, install/remove/reconfigure, and failure states. */
+import { afterEach, describe, expect, it, vi, type Mock } from 'vitest'
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import type { SubagentBackendEntry, SubagentBackendSnapshot, SubagentToolEntry } from '@deepseek-ai/dsh-api-remotes/client'
+import { SubagentsSettingsTab, type SubagentsSettingsTabInjected } from '../src/client/SubagentsSettingsTab.tsx'
 import type { SubagentsSettingsTabProps } from '../src/client/SubagentsSettingsTab.tsx'
 
 afterEach(cleanup)
 
+/** The callable mocks the tab receives; the type keeps `.mock.calls` usable. */
+interface MountedMocks {
+  list: Mock
+  install: Mock
+  remove: Mock
+  updateConfig: Mock
+}
+
 const COPY: Record<string, string> = {
-  intro: '跨会话查看与管理的子智能体列表。',
-  empty: '暂无子智能体。',
-  emptyDetail: '会话中委派的子智能体会出现在这里。',
+  intro: '管理此 dsh 安装的子智能体后端。',
+  loading: '正在读取目录…',
+  failed: '目录读取失败。',
+  retry: '重试',
   refresh: '刷新',
-  running: '运行中',
-  idle: '空闲',
-  modeContinuable: '可继续',
-  modeOneShot: '一次性',
-  actionOpen: '打开',
-  actionStop: '停止',
-  stopping: '停止中…',
-  stopFailed: '停止失败，请重试。',
-  unhealthy: '不可用',
+  installedSection: '已安装',
+  candidatesSection: '可安装',
+  toolsSection: '子智能体工具',
+  noTools: '没有具名子智能体工具。',
+  toolModeOneShot: '一次性',
+  toolModeContinuable: '可继续',
+  sourceBuiltin: '内置',
+  sourceUser: '用户配置',
+  enabled: '已启用',
+  disabled: '已停用',
+  notInstalled: '未安装',
+  capOutputSchema: '结构化输出',
+  capPersona: '人设',
+  noConfig: '无配置',
+  actionInstall: '安装',
+  actionEdit: '编辑配置',
+  actionRemove: '移除',
+  actionConfirmRemove: '确认移除？',
+  actionSave: '保存',
+  actionCancel: '取消',
+  removing: '移除中…',
+  configInvalid: '配置必须是 JSON 对象。',
+  opFailed: '操作失败：',
 }
 
-const sid = (id: string): SessionId => id as SessionId
-const PARENT = sid('parent-1')
-const CHILD = sid('child-1')
-const OTHER = sid('child-2')
-
-function summary(over: Partial<SessionSummary> & { id: string }): SessionSummary {
-  return { displayTitle: over.id, running: false, updatedAt: 0, ...over } as SessionSummary
-}
-
-function state(over: Partial<SessionListState> = {}): SessionListState {
+function backend(over: Partial<SubagentBackendEntry> & { moduleName: string; providerName: string }): SubagentBackendEntry {
   return {
-    ids: [PARENT, CHILD, OTHER],
-    byId: {
-      [PARENT]: summary({ id: PARENT, displayTitle: 'Parent' }),
-      [CHILD]: summary({ id: CHILD, parentId: PARENT, displayTitle: 'worker', origin: 'subagent', running: true }),
-      [OTHER]: summary({ id: OTHER, parentId: PARENT, displayTitle: 'reviewer', origin: 'subagent', running: false }),
-    },
-    current: undefined,
-    phase: 'ready',
-    subagentsByParent: {
-      [PARENT]: {
-        entries: [
-          { kind: 'child', id: CHILD, mode: 'continuable', label: 'worker', activity: 'running', hasChildren: false },
-          { kind: 'child', id: OTHER, mode: 'one-shot', label: 'reviewer', activity: 'inactive', hasChildren: false },
-          { kind: 'diagnostic', id: sid('bad-1'), reason: 'corrupt' },
-        ],
-        parentAvailable: true,
-        state: 'ready',
-        error: null,
-      },
-    },
-    jobsBySession: {},
-    currentAddress: undefined,
+    entryId: over.moduleName,
+    installed: true,
+    enabled: true,
+    source: 'bundle',
     ...over,
   }
 }
 
-function mount(over: Partial<SessionListState> = {}, actions: Partial<SubagentsSettingsTabProps> = {}) {
-  const store = createSnapshotStore<SessionListState>(state(over))
-  const open = vi.fn()
-  const refresh = vi.fn()
-  const stop = vi.fn<() => Promise<void>>().mockResolvedValue(undefined)
+const SPAWN = backend({
+  entryId: 'subagent-spawn-in-process',
+  moduleName: '@deepseek-ai/dsh-subagent-spawn-in-process',
+  providerName: 'spawn',
+  capabilities: { outputSchema: true, depthLimit: false, toolFilter: false, persona: true },
+  config: { providerName: 'spawn' },
+})
+const ACP = backend({
+  entryId: '@deepseek-ai/dsh-subagent-acp',
+  moduleName: '@deepseek-ai/dsh-subagent-acp',
+  providerName: 'acp',
+  installed: false,
+  enabled: false,
+})
+
+const VISION: SubagentToolEntry = {
+  entryId: 'tool-subagent-vision',
+  toolName: 'subagent_vision',
+  provider: 'spawn',
+  model: 'mimo-v2.5',
+  backgroundMode: 'one-shot',
+  enabled: true,
+  source: 'user',
+  config: { provider: 'spawn', toolName: 'subagent_vision', agentOptions: { provider: 'xiaomi', model: 'mimo-v2.5' } },
+}
+
+function snapshot(backends: SubagentBackendEntry[], tools: SubagentToolEntry[] = []): SubagentBackendSnapshot {
+  return { backends, tools }
+}
+
+function mount(over: Partial<SubagentsSettingsTabInjected> = {}): MountedMocks {
+  const list = vi.fn().mockResolvedValue(snapshot([SPAWN, ACP]))
+  const install = vi.fn().mockResolvedValue(undefined)
+  const remove = vi.fn().mockResolvedValue(undefined)
+  const updateConfig = vi.fn().mockResolvedValue(undefined)
+  const injected = { list, install, remove, updateConfig, ...over }
   const props: SubagentsSettingsTabProps = {
-    useSessions: bindSnapshotSelector(store),
+    useSessions: (() => undefined) as never,
     useWorkspaces: (() => undefined) as never,
-    open,
-    refresh,
-    stop,
+    ...injected,
     t: (key: string) => COPY[key] ?? key,
-    ...actions,
   }
   render(<SubagentsSettingsTab {...props} />)
-  return { store, ...props }
+  return injected as unknown as MountedMocks
 }
 
 describe('SubagentsSettingsTab', () => {
-  it('flattens catalogs into a roster with running rows first and mode tags', async () => {
-    mount()
-    const rows = await screen.findAllByRole('listitem')
-    expect(rows).toHaveLength(3)
-    expect(screen.getByText('worker')).toBeDefined()
-    expect(screen.getByText('reviewer')).toBeDefined()
-    expect(screen.getByText('可继续')).toBeDefined()
+  it('renders named subagent tools with provider, model, and mode badges', async () => {
+    mount({ list: vi.fn().mockResolvedValue(snapshot([SPAWN, ACP], [VISION])) })
+    expect(await screen.findByText('subagent_vision')).toBeDefined()
+    expect(screen.getByText('子智能体工具')).toBeDefined()
+    // 'spawn' appears on the backend card and the tool's provider badge.
+    expect(screen.getAllByText('spawn').length).toBeGreaterThanOrEqual(2)
+    expect(screen.getByText('mimo-v2.5')).toBeDefined()
     expect(screen.getByText('一次性')).toBeDefined()
-    // Running row sorts first: worker is continuable/running, reviewer one-shot/idle.
-    expect(rows[0]?.textContent).toContain('worker')
-    expect(screen.getByRole('img', { name: '运行中' })).toBeDefined()
-    expect(screen.getByRole('img', { name: '空闲' })).toBeDefined()
+    expect(screen.getByText('用户配置')).toBeDefined()
+    // '已启用' appears on the spawn backend card and the tool card.
+    expect(screen.getAllByText('已启用').length).toBeGreaterThanOrEqual(2)
   })
 
-  it('opens a child transcript through the injected open action', async () => {
-    const { open } = mount()
-    await screen.findAllByRole('listitem')
-    const expected: SubagentAddress = { parentSessionId: PARENT, childSessionId: CHILD, mode: 'continuable' }
-    fireEvent.click(screen.getAllByRole('button', { name: '打开' })[0]!)
-    expect(open).toHaveBeenCalledWith(expected)
-  })
-
-  it('stops only running continuable children and surfaces failures', async () => {
-    const { stop } = mount({}, {
-      stop: vi.fn<() => Promise<void>>().mockRejectedValue(new Error('refused')),
-    })
-    await screen.findAllByRole('listitem')
-    // Only the running continuable row carries a Stop button.
-    expect(screen.getAllByRole('button', { name: '停止' })).toHaveLength(1)
-    fireEvent.click(screen.getByRole('button', { name: '停止' }))
+  it('reconfigures a named tool through the JSON editor', async () => {
+    const { updateConfig, list } = mount({ list: vi.fn().mockResolvedValue(snapshot([SPAWN, ACP], [VISION])) })
+    await screen.findByText('subagent_vision')
+    const toolCard = screen.getByText('subagent_vision').closest('li') as HTMLElement
+    fireEvent.click(within(toolCard).getByRole('button', { name: '编辑配置' }))
+    const editor = within(toolCard).getByRole('textbox') as HTMLTextAreaElement
+    expect(editor.value).toContain('"toolName": "subagent_vision"')
+    fireEvent.change(editor, { target: { value: '{ "provider": "spawn", "toolName": "subagent_vision", "backgroundMode": "continuable" }' } })
+    fireEvent.click(within(toolCard).getByRole('button', { name: '保存' }))
     await waitFor(() => {
-      expect(stop).toHaveBeenCalledWith({ parentSessionId: PARENT, childSessionId: CHILD, mode: 'continuable' })
+      expect(updateConfig).toHaveBeenCalledWith({
+        entryId: 'tool-subagent-vision',
+        config: { provider: 'spawn', toolName: 'subagent_vision', backgroundMode: 'continuable' },
+      })
     })
+    await waitFor(() => { expect(list.mock.calls.length).toBeGreaterThanOrEqual(2) })
+  })
+
+  it('removes a named tool after a two-step confirmation', async () => {
+    const { remove } = mount({ list: vi.fn().mockResolvedValue(snapshot([SPAWN, ACP], [VISION])) })
+    await screen.findByText('subagent_vision')
+    const toolCard = screen.getByText('subagent_vision').closest('li') as HTMLElement
+    fireEvent.click(within(toolCard).getByRole('button', { name: '移除' }))
+    expect(within(toolCard).getByRole('button', { name: '确认移除？' })).toBeDefined()
+    fireEvent.click(within(toolCard).getByRole('button', { name: '确认移除？' }))
+    await waitFor(() => {
+      expect(remove).toHaveBeenCalledWith({ entryId: 'tool-subagent-vision' })
+    })
+  })
+
+  it('renders installed backends and installable candidates with badges', async () => {
+    mount()
+    expect(await screen.findByText('spawn')).toBeDefined()
+    expect(screen.getByText('acp')).toBeDefined()
+    expect(screen.getByText('已安装')).toBeDefined()
+    expect(screen.getByText('可安装')).toBeDefined()
+    expect(screen.getByText('内置')).toBeDefined()
+    expect(screen.getByText('已启用')).toBeDefined()
+    expect(screen.getByText('未安装')).toBeDefined()
+    // Only the true capability chips render.
+    expect(screen.getByText('结构化输出')).toBeDefined()
+    expect(screen.getByText('人设')).toBeDefined()
+    expect(screen.queryByText('深度限制')).toBeNull()
+  })
+
+  it('reconfigures a backend through the JSON editor', async () => {
+    const { updateConfig, list } = mount()
+    await screen.findByText('spawn')
+    fireEvent.click(screen.getByRole('button', { name: '编辑配置' }))
+    const editor = screen.getByRole('textbox') as HTMLTextAreaElement
+    expect(editor.value).toContain('"providerName": "spawn"')
+    fireEvent.change(editor, { target: { value: '{ "providerName": "spawn", "timeoutMs": 9000 }' } })
+    fireEvent.click(screen.getByRole('button', { name: '保存' }))
+    await waitFor(() => {
+      expect(updateConfig).toHaveBeenCalledWith({
+        entryId: 'subagent-spawn-in-process',
+        config: { providerName: 'spawn', timeoutMs: 9000 },
+      })
+    })
+    // The catalog is re-read after a successful write.
+    await waitFor(() => { expect(list.mock.calls.length).toBeGreaterThanOrEqual(2) })
+  })
+
+  it('rejects a malformed config without calling the Remote', async () => {
+    const { updateConfig } = mount()
+    await screen.findByText('spawn')
+    fireEvent.click(screen.getByRole('button', { name: '编辑配置' }))
+    fireEvent.change(screen.getByRole('textbox'), { target: { value: 'not json' } })
+    fireEvent.click(screen.getByRole('button', { name: '保存' }))
     const alert = await screen.findByRole('alert')
-    expect(alert.textContent).toContain('停止失败')
+    expect(alert.textContent).toContain('配置必须是 JSON 对象。')
+    expect(updateConfig).not.toHaveBeenCalled()
   })
 
-  it('shows the empty state when no catalogs exist', async () => {
-    mount({ subagentsByParent: {} })
-    expect(await screen.findByText('暂无子智能体。')).toBeDefined()
+  it('installs a candidate backend with the prefilled provider config', async () => {
+    const { install } = mount()
+    await screen.findByText('acp')
+    fireEvent.click(screen.getByRole('button', { name: '安装' }))
+    const editor = screen.getByRole('textbox') as HTMLTextAreaElement
+    expect(editor.value).toContain('"providerName": "acp"')
+    // The editor's save button carries the same Install label.
+    fireEvent.click(screen.getByRole('button', { name: '安装' }))
+    await waitFor(() => {
+      expect(install).toHaveBeenCalledWith({
+        moduleName: '@deepseek-ai/dsh-subagent-acp',
+        providerName: 'acp',
+        config: { providerName: 'acp' },
+      })
+    })
   })
 
-  it('auto-pulls a catalog once for each parent summaries claim', () => {
-    const { refresh } = mount()
-    expect(refresh).toHaveBeenCalledWith(PARENT)
+  it('removes a backend after a two-step confirmation', async () => {
+    const { remove } = mount()
+    await screen.findByText('spawn')
+    fireEvent.click(screen.getByRole('button', { name: '移除' }))
+    expect(screen.getByRole('button', { name: '确认移除？' })).toBeDefined()
+    expect(remove).not.toHaveBeenCalled()
+    fireEvent.click(screen.getByRole('button', { name: '确认移除？' }))
+    await waitFor(() => {
+      expect(remove).toHaveBeenCalledWith({ entryId: 'subagent-spawn-in-process' })
+    })
+  })
+
+  it('surfaces an operation failure banner', async () => {
+    mount({
+      remove: vi.fn().mockRejectedValue(new Error('refused')),
+    })
+    await screen.findByText('spawn')
+    fireEvent.click(screen.getByRole('button', { name: '移除' }))
+    fireEvent.click(screen.getByRole('button', { name: '确认移除？' }))
+    const alert = await screen.findByRole('alert')
+    expect(alert.textContent).toContain('操作失败：refused')
+  })
+
+  it('shows the failure view with a working retry when the catalog read fails', async () => {
+    const list = vi.fn()
+      .mockRejectedValueOnce(new Error('boom'))
+      .mockResolvedValueOnce(snapshot([SPAWN]))
+    mount({ list })
+    const alert = await screen.findByRole('alert')
+    expect(alert.textContent).toContain('目录读取失败。boom')
+    fireEvent.click(screen.getByRole('button', { name: '重试' }))
+    expect(await screen.findByText('spawn')).toBeDefined()
   })
 })

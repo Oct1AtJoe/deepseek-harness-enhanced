@@ -1,6 +1,6 @@
-/** Subagents management surface, browser half — one Settings tab over the sessions service. */
+/** Subagents management surface, browser half — one Settings tab over the subagent manager Remote. */
 
-import type { ConnectionHandle } from '@deepseek-ai/dsh-api-remotes/client'
+import type {} from '@deepseek-ai/dsh-api-remotes/client'
 import type { ClientContext } from '@deepseek-ai/dsh-client-runtime/client'
 import type {} from '@deepseek-ai/dsh-client-locale/client'
 import type {} from '@deepseek-ai/dsh-client-ui-settings/client'
@@ -20,30 +20,29 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
 /** Dictionary namespace owned by this plugin. */
 export const NS = 'settings.subagents'
 
-/** Services required by the Settings registration and session navigation. */
-export const inject = ['slots', 'locale', 'sessions', 'connection']
+/** Services required by the Settings registration and the subagent manager Remote. */
+export const inject = ['slots', 'locale', 'remote', 'remote.subagentManager']
 
 /** Contribute the Subagents management tab to the Plugins settings section. */
 export function apply(ctx: ClientContext): void {
   ctx.effect(() => ctx.locale.register(NS, { zh, en }), 'ui-settings-subagents: dictionaries')
 
   const t = ctx.locale.bind(NS)
-  const { api } = ctx.get('connection') as ConnectionHandle
-  const stop: SubagentsSettingsTabInjected['stop'] = async (address) => {
-    const response = await api.subagents.interrupt(address)
-    const result = response.result
+  /** One settled Remote call: a value or a wire error. */
+  type RemoteResult<T> = { ok: true; value: T } | { ok: false; error: { code: string; message: string } }
+  /** Run one Remote call and reject with its wire error text. */
+  const call = async <T>(method: string, operation: () => Promise<RemoteResult<T>>): Promise<T> => {
+    const result = await operation()
     if (!result.ok) {
-      throw new Error(`subagents.interrupt failed: ${result.error.code}: ${result.error.message}`)
+      throw new Error(`${method} failed: ${result.error.code}: ${result.error.message}`)
     }
+    return result.value
   }
   const injected = (): SubagentsSettingsTabInjected => ({
-    open(address) {
-      ctx.sessions.openSubagent(address)
-    },
-    refresh(parentSessionId) {
-      ctx.sessions.refreshSubagents(parentSessionId)
-    },
-    stop,
+    list: async () => call('subagentManager.list', () => ctx.remote.subagentManager.list({})),
+    install: async (request) => { await call('subagentManager.installBackend', () => ctx.remote.subagentManager.installBackend(request)) },
+    remove: async (request) => { await call('subagentManager.removeBackend', () => ctx.remote.subagentManager.removeBackend(request)) },
+    updateConfig: async (request) => { await call('subagentManager.updateConfig', () => ctx.remote.subagentManager.updateConfig(request)) },
   })
 
   ctx.slots.inject('settings.plugins.tab', () => ctx.slots.register({

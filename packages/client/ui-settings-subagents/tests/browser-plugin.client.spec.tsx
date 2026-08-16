@@ -1,10 +1,9 @@
 // @vitest-environment jsdom
-import { Context } from '@deepseek-ai/cordis'
+import { Context, Service } from '@deepseek-ai/cordis'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { cleanup } from '@testing-library/react'
 import { LocaleRuntime } from '@deepseek-ai/dsh-client-locale/client'
 import { SlotRegistry } from '@deepseek-ai/dsh-client-runtime/client'
-import type { SessionId, SubagentAddress } from '@deepseek-ai/dsh-client-runtime/client'
 import { resolveSlotLabel } from '@deepseek-ai/dsh-client-ui-slots'
 import { usePinnedBrowserLanguages } from '@deepseek-ai/dsh-client-test-runtime'
 import { apply, inject, NS } from '../src/client/index.ts'
@@ -14,26 +13,32 @@ import type { SubagentsSettingsTabInjected } from '../src/client/SubagentsSettin
 usePinnedBrowserLanguages('zh-CN')
 afterEach(cleanup)
 
-const sid = (id: string) => id as SessionId
-
-type InterruptResponse =
-  | { readonly result: { readonly ok: true; readonly value: { readonly accepted: true } } }
-  | { readonly result: { readonly ok: false; readonly error: { readonly code: string; readonly message: string } } }
+const EMPTY = { backends: [], tools: [] }
+type Result<T> =
+  | { readonly ok: true; readonly value: T }
+  | { readonly ok: false; readonly error: { readonly code: string; readonly message: string } }
 
 async function bench() {
   const ctx = new Context()
   await ctx.plugin(SlotRegistry).await()
   const locale = new LocaleRuntime(ctx)
   ctx.provide('locale', locale)
-  const actionCalls: { method: string; args: unknown[] }[] = []
-  ctx.provide('sessions', {
-    openSubagent: (address: SubagentAddress) => { actionCalls.push({ method: 'openSubagent', args: [address] }) },
-    refreshSubagents: (parentSessionId: SessionId) => { actionCalls.push({ method: 'refreshSubagents', args: [parentSessionId] }) },
-  })
-  const interrupt = vi.fn<() => Promise<InterruptResponse>>()
-    .mockResolvedValue({ result: { ok: true, value: { accepted: true } } })
-  ctx.provide('connection', { api: { subagents: { interrupt } } })
-  return { ctx, slots: ctx.get('slots') as SlotRegistry, locale, interrupt, actionCalls }
+  class RemoteService extends Service {
+    constructor(serviceCtx: Context) {
+      super(serviceCtx, 'remote')
+    }
+  }
+  new RemoteService(ctx)
+  const list = vi.fn<() => Promise<Result<typeof EMPTY>>>()
+    .mockResolvedValue({ ok: true, value: EMPTY })
+  const install = vi.fn<() => Promise<Result<{ accepted: true }>>>()
+    .mockResolvedValue({ ok: true, value: { accepted: true } })
+  const remove = vi.fn<() => Promise<Result<{ accepted: true }>>>()
+    .mockResolvedValue({ ok: true, value: { accepted: true } })
+  const updateConfig = vi.fn<() => Promise<Result<{ accepted: true }>>>()
+    .mockResolvedValue({ ok: true, value: { accepted: true } })
+  ctx.provide('remote.subagentManager', { list, installBackend: install, removeBackend: remove, updateConfig })
+  return { ctx, slots: ctx.get('slots') as SlotRegistry, locale, list, install, remove, updateConfig }
 }
 
 function declare(slots: SlotRegistry): () => void {
@@ -44,11 +49,11 @@ function declare(slots: SlotRegistry): () => void {
 }
 
 describe('ui-settings-subagents browser plugin', () => {
-  it('declares only the services used by the Settings contribution', () => {
-    expect(inject).toEqual(['slots', 'locale', 'sessions', 'connection'])
+  it('declares only the services used by the Settings Remote contribution', () => {
+    expect(inject).toEqual(['slots', 'locale', 'remote', 'remote.subagentManager'])
   })
 
-  it('registers a localized tab whose injected face routes through sessions and connection', async () => {
+  it('registers a localized tab without reading the Remote eagerly', async () => {
     const b = await bench()
     declare(b.slots)
     await b.ctx.plugin({ inject: [...inject], apply }).await()
@@ -58,26 +63,20 @@ describe('ui-settings-subagents browser plugin', () => {
     expect(entry.options).toMatchObject({ id: 'subagents', order: 30 })
     expect(entry.locale).toBe(NS)
     expect(resolveSlotLabel(entry.options.label)).toBe('子智能体')
+    expect(b.list).not.toHaveBeenCalled()
 
-    const address: SubagentAddress = {
-      parentSessionId: sid('parent'),
-      childSessionId: sid('child'),
-      mode: 'continuable',
-    }
     const injected = (entry.inject as unknown as () => SubagentsSettingsTabInjected)()
-    injected.open(address)
-    injected.refresh(sid('parent'))
-    expect(b.actionCalls).toEqual([
-      { method: 'openSubagent', args: [address] },
-      { method: 'refreshSubagents', args: [sid('parent')] },
-    ])
-    await expect(injected.stop(address)).resolves.toBeUndefined()
-    expect(b.interrupt).toHaveBeenCalledWith(address)
-
-    b.interrupt.mockResolvedValueOnce({
-      result: { ok: false, error: { code: 'REMOTE_ERROR', message: 'unavailable' } },
-    })
-    await expect(injected.stop(address)).rejects.toThrow('subagents.interrupt failed: REMOTE_ERROR: unavailable')
+    await expect(injected.list()).resolves.toEqual(EMPTY)
+    expect(b.list).toHaveBeenCalledTimes(1)
+    const request = { moduleName: '@deepseek-ai/dsh-subagent-acp', providerName: 'acp', config: { providerName: 'acp' } }
+    await expect(injected.install(request)).resolves.toBeUndefined()
+    expect(b.install).toHaveBeenCalledWith(request)
+    await expect(injected.remove({ entryId: 'row-1' })).resolves.toBeUndefined()
+    expect(b.remove).toHaveBeenCalledWith({ entryId: 'row-1' })
+    await expect(injected.updateConfig({ entryId: 'row-1', config: { providerName: 'acp' } })).resolves.toBeUndefined()
+    expect(b.updateConfig).toHaveBeenCalledWith({ entryId: 'row-1', config: { providerName: 'acp' } })
+    b.list.mockResolvedValueOnce({ ok: false, error: { code: 'REMOTE_ERROR', message: 'unavailable' } })
+    await expect(injected.list()).rejects.toThrow('subagentManager.list failed: REMOTE_ERROR: unavailable')
     await b.ctx.fiber.dispose()
   })
 

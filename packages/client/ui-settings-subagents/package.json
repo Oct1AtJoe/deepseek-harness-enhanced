@@ -1,6 +1,6 @@
 {
   "name": "@deepseek-ai/dsh-client-ui-settings-subagents",
-  "description": "Subagents management tab in Web Plugins settings: cross-session roster with stop and open",
+  "description": "Subagents management tab in Web Plugins settings: installed backend directory with install, remove, and reconfigure",
   "version": "0.1.0-rc.5",
   "publishConfig": {
     "access": "public"

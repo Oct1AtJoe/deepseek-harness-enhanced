@@ -291,7 +291,9 @@ export const CLIENT_SLOT_API: readonly ClientSlotEntry[] = [
     slotInject: '',
     declaredBy: 'an entry in \'conversation.chat.node\' (client-ui-conversation), so it exists while that entry is mounted',
     occupants: [
+      'client-ui-deliverables-custom ProducedFiles',
       'client-ui-deliverables ProducedFiles',
+      'client-ui-resend-failed-round ResendAction',
     ],
     replaceRisk: 'none',
     example: 'return {\n  inject: [\'slots\'],\n  apply(ctx) {\n    ctx.slots.inject(\'conversation.chat.turnTail\', () => ctx.slots.register(\n      { name: \'conversation.chat.turnTail\', select: owner => null },\n      () => React.createElement(\'div\', null, \'hello\'),\n    ))\n  },\n}',
@@ -333,6 +335,7 @@ export const CLIENT_SLOT_API: readonly ClientSlotEntry[] = [
     declaredBy: 'an entry in \'conversation\' (client-ui-conversation), so it exists while that entry is mounted',
     occupants: [
       'client-ui-conversation ApprovalPanel',
+      'client-ui-subagent-custom SubagentReadOnlyComposer',
       'client-ui-subagent SubagentReadOnlyComposer',
       'client-ui-user-questions QuestionComposer',
     ],
@@ -801,7 +804,9 @@ export const CLIENT_SLOT_API: readonly ClientSlotEntry[] = [
     hookContext: '',
     slotInject: '',
     declaredBy: 'an entry in \'conversation\' (client-ui-conversation), so it exists while that entry is mounted',
-    occupants: [],
+    occupants: [
+      'client-ui-subagent-custom SubagentComposerAction id \'subagent-activity\'',
+    ],
     replaceRisk: 'none',
     example: 'return {\n  inject: [\'slots\'],\n  apply(ctx) {\n    ctx.slots.inject(\'conversation.input.right\', () => ctx.slots.register(\n      { name: \'conversation.input.right\', id: \'my-entry\', order: 100, label: \'My entry\' },\n      () => React.createElement(\'div\', null, \'hello\'),\n    ))\n  },\n}',
     source: 'packages/client/ui-conversation/src/client/contract/slots.ts:187',
@@ -910,6 +915,7 @@ export const CLIENT_SLOT_API: readonly ClientSlotEntry[] = [
     occupants: [
       'client-ui-agent-preset AgentPresetLabel id \'agent-preset\'',
       'client-ui-jobs JobListAction id \'job-list\'',
+      'client-ui-subagent-custom SubagentCatalogAction id \'subagent-catalog\'',
       'client-ui-subagent SubagentCatalogAction id \'subagent-catalog\'',
     ],
     replaceRisk: 'none',
@@ -1188,6 +1194,7 @@ export const CLIENT_SLOT_API: readonly ClientSlotEntry[] = [
       'client-ui-agent-preset AgentPresetRow id \'agent-preset\'',
       'client-ui-conversation EnterBehaviorRow id \'composer-enter\'',
       'client-ui-permission-presets PermissionRow id \'permission\'',
+      'client-ui-theme-custom TechThemeRow id \'appearance-custom\'',
       'client-ui-theme AppearanceRow id \'appearance\'',
     ],
     replaceRisk: 'none',
@@ -1354,6 +1361,8 @@ export const CLIENT_SLOT_API: readonly ClientSlotEntry[] = [
     occupants: [
       'client-ui-settings-plugin-inventory PluginInventorySettingsTab id \'all\'',
       'client-ui-settings-plugins ConfigurablePluginsTab id \'configurable\'',
+      'client-ui-settings-skills SkillsSettingsTab id \'skills\'',
+      'client-ui-settings-subagents SubagentsSettingsTab id \'subagents\'',
     ],
     replaceRisk: 'none',
     example: 'return {\n  inject: [\'slots\'],\n  apply(ctx) {\n    ctx.slots.inject(\'settings.plugins.tab\', () => ctx.slots.register(\n      { name: \'settings.plugins.tab\', id: \'my-entry\', order: 100, label: \'My entry\' },\n      () => React.createElement(\'div\', null, \'hello\'),\n    ))\n  },\n}',
