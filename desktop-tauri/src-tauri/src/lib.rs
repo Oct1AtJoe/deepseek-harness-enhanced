@@ -1,0 +1,735 @@
+//! DeepSeek Harness 桌面壳（Tauri 2，Windows）。
+//!
+//! 职责：
+//! 1. 启动时探测本地 dsh 服务（默认 127.0.0.1:3080），已有则复用，空闲则拉起 `dsh web`；
+//! 2. 服务就绪后把主窗口从加载页导航到 Web GUI；
+//! 3. 托盘常驻：关闭窗口仅隐藏，托盘菜单显示/退出/开机自启；
+//! 4. 退出时只回收本次启动的 dsh 子进程，复用的实例不动。
+
+use std::{
+    io::{BufRead, BufReader},
+    net::{SocketAddr, TcpStream},
+    path::PathBuf,
+    process::{Child, Command, Stdio},
+    sync::{
+        atomic::{AtomicBool, AtomicU32, Ordering},
+        Mutex,
+    },
+    thread,
+    time::{Duration, Instant},
+};
+
+use tauri::{
+    menu::{Menu, MenuItem},
+    tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
+    AppHandle, Manager, RunEvent, WindowEvent,
+};
+use tauri_plugin_autostart::ManagerExt;
+use tauri_plugin_log::{Target, TargetKind};
+use tauri_plugin_notification::NotificationExt;
+
+/// 与 dsh 服务的约定端口（可用 `DSH_DESKTOP_PORT` 覆盖）。
+fn app_port() -> u16 {
+    std::env::var("DSH_DESKTOP_PORT")
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(3080)
+}
+
+/// 等待服务就绪的超时时间。
+const READY_TIMEOUT: Duration = Duration::from_secs(60);
+
+/// nvm 版本目录名（如 v22.12.0）按 semver 比较；字符串排序会把 v9.11.0 排在 v22.12.0 之后。
+fn version_key(path: &std::path::Path) -> (u64, u64, u64) {
+    let name = path
+        .file_name()
+        .map(|n| n.to_string_lossy().into_owned())
+        .unwrap_or_default();
+    let parts: Vec<u64> = name
+        .trim_start_matches('v')
+        .split('.')
+        .map(|p| p.parse().unwrap_or(0))
+        .collect();
+    (
+        parts.first().copied().unwrap_or(0),
+        parts.get(1).copied().unwrap_or(0),
+        parts.get(2).copied().unwrap_or(0),
+    )
+}
+
+/// spawn dsh 的失败原因：NotFound 供错误页提示"未找到"，其余归为其它失败。
+enum SpawnError {
+    NotFound(String),
+    Other(String),
+}
+
+impl std::fmt::Display for SpawnError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            SpawnError::NotFound(m) | SpawnError::Other(m) => f.write_str(m),
+        }
+    }
+}
+
+/// 桌面壳的共享运行时状态。
+struct DshState {
+    /// 本次运行 spawn 的 dsh 子进程（None = 复用了已有实例）。
+    child: Mutex<Option<Child>>,
+    /// 子进程是否由本次运行启动（决定退出时是否回收）。
+    spawned_this_run: AtomicBool,
+    /// spawn 失败标志（立即终止等待并跳错误页）。
+    spawn_failed: AtomicBool,
+    /// 托盘"退出"标志（置位后放行窗口关闭与应用退出）。
+    quitting: AtomicBool,
+    /// 是否已提示过"隐藏到托盘"。
+    tray_tip_shown: AtomicBool,
+    /// 未读任务完成数（Dock 角标）。
+    unread: AtomicU32,
+}
+
+/// 解析 `DSH_DESKTOP_BACKEND`：JSON argv 数组，否则空格分隔；返回 (command, args)。
+fn parse_command(value: &str) -> (String, Vec<String>) {
+    if let Ok(parsed) = serde_json::from_str::<Vec<String>>(value) {
+        if let Some((first, rest)) = parsed.split_first() {
+            return (first.clone(), rest.to_vec());
+        }
+    }
+    let mut parts = value.split_whitespace().map(String::from);
+    let first = parts.next().unwrap_or_default();
+    (first, parts.collect())
+}
+
+/// 探测 127.0.0.1:port 是否已有服务在监听。
+fn port_open(port: u16) -> bool {
+    TcpStream::connect_timeout(
+        &SocketAddr::from(([127, 0, 0, 1], port)),
+        Duration::from_millis(300),
+    )
+    .is_ok()
+}
+
+/// 定位 node.exe（DSH_NODE / PATH / nvm-windows / 官方安装器）。
+fn find_node() -> Option<PathBuf> {
+    if let Ok(p) = std::env::var("DSH_NODE") {
+        let pb = PathBuf::from(&p);
+        if pb.is_file() {
+            return Some(pb);
+        }
+    }
+    if let Some(paths) = std::env::var_os("PATH") {
+        for dir in std::env::split_paths(&paths) {
+            let pb = dir.join("node.exe");
+            if pb.is_file() {
+                return Some(pb);
+            }
+        }
+    }
+    let mut candidates: Vec<PathBuf> = Vec::new();
+    let mut nvm_roots: Vec<PathBuf> = Vec::new();
+    if let Ok(h) = std::env::var("NVM_HOME") {
+        nvm_roots.push(PathBuf::from(h));
+    }
+    if let Ok(a) = std::env::var("APPDATA") {
+        nvm_roots.push(PathBuf::from(&a).join("nvm"));
+    }
+    for root in &nvm_roots {
+        if let Ok(entries) = std::fs::read_dir(root) {
+            let mut dirs: Vec<PathBuf> = entries
+                .flatten()
+                .map(|e| e.path())
+                .filter(|p| p.is_dir())
+                .collect();
+            dirs.sort_by_key(|d| version_key(d));
+            for d in dirs.iter().rev() {
+                candidates.push(d.join("node.exe"));
+            }
+        }
+        candidates.push(root.join("node.exe"));
+    }
+    if let Ok(s) = std::env::var("NVM_SYMLINK") {
+        candidates.push(PathBuf::from(s).join("node.exe"));
+    }
+    for p in [
+        r"C:\Program Files\nodejs\node.exe",
+        r"C:\Program Files (x86)\nodejs\node.exe",
+    ] {
+        candidates.push(PathBuf::from(p));
+    }
+    candidates.into_iter().find(|p| p.is_file())
+}
+
+/// 定位 dsh 的 bin.js（npm/pnpm/nvm 全局安装位置），支持 DSH_BIN 直接指向任意可执行文件。
+fn find_dsh_bin_js() -> Option<PathBuf> {
+    if let Ok(p) = std::env::var("DSH_BIN") {
+        let pb = PathBuf::from(&p);
+        if pb.is_file() {
+            return Some(pb);
+        }
+    }
+    const REL: &str = "node_modules\\@deepseek-ai\\dsh\\lib\\bin.js";
+    let mut roots: Vec<PathBuf> = Vec::new();
+    if let Ok(a) = std::env::var("APPDATA") {
+        roots.push(PathBuf::from(&a).join("npm"));
+        roots.push(PathBuf::from(&a).join("pnpm"));
+        let nvm_dir = PathBuf::from(&a).join("nvm");
+        roots.push(nvm_dir.clone());
+        if let Ok(entries) = std::fs::read_dir(&nvm_dir) {
+            for e in entries.flatten() {
+                if e.path().is_dir() {
+                    roots.push(e.path());
+                }
+            }
+        }
+    }
+    if let Ok(l) = std::env::var("LOCALAPPDATA") {
+        roots.push(PathBuf::from(&l).join("pnpm"));
+    }
+    if let Ok(h) = std::env::var("NVM_HOME") {
+        roots.push(PathBuf::from(&h));
+        if let Ok(entries) = std::fs::read_dir(&h) {
+            for e in entries.flatten() {
+                if e.path().is_dir() {
+                    roots.push(e.path());
+                }
+            }
+        }
+    }
+    if let Ok(s) = std::env::var("NVM_SYMLINK") {
+        roots.push(PathBuf::from(s));
+    }
+    roots.push(PathBuf::from(r"C:\Program Files\nodejs"));
+    roots.push(PathBuf::from(r"C:\Program Files (x86)\nodejs"));
+    if let Some(paths) = std::env::var_os("PATH") {
+        for dir in std::env::split_paths(&paths) {
+            roots.push(dir);
+        }
+    }
+    roots
+        .into_iter()
+        .map(|root| root.join(REL))
+        .find(|p| p.is_file())
+}
+
+/// spawn 任意命令，stdout/stderr 逐行转发日志，CREATE_NO_WINDOW 防闪黑窗。
+fn spawn_child(command: &str, args: &[String]) -> Result<Child, SpawnError> {
+    use std::os::windows::process::CommandExt;
+    let mut cmd = Command::new(command);
+    cmd.args(args)
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .creation_flags(0x0800_0000); // CREATE_NO_WINDOW
+    let mut child = cmd
+        .spawn()
+        .map_err(|e| SpawnError::Other(format!("spawn {command} 失败：{e}")))?;
+    if let Some(out) = child.stdout.take() {
+        thread::spawn(move || {
+            for line in BufReader::new(out).lines().map_while(Result::ok) {
+                log::info!("[dsh] {line}");
+            }
+        });
+    }
+    if let Some(err) = child.stderr.take() {
+        thread::spawn(move || {
+            for line in BufReader::new(err).lines().map_while(Result::ok) {
+                log::warn!("[dsh] {line}");
+            }
+        });
+    }
+    Ok(child)
+}
+
+/// spawn `dsh web --host 127.0.0.1 --port <port>`。
+///
+/// 默认 `node <bin.js>` 直跑（dsh.cmd shim 有引号转义坑）；`DSH_DESKTOP_BACKEND`
+/// 提供完整 argv 覆盖（dev 场景跑仓库源码 CLI）。
+fn spawn_dsh(port: u16) -> Result<Child, SpawnError> {
+    let port = port.to_string();
+    if let Ok(override_cmd) = std::env::var("DSH_DESKTOP_BACKEND") {
+        let (command, args) = parse_command(&override_cmd);
+        let mut args = args;
+        args.push("web".into());
+        args.push("--host".into());
+        args.push("127.0.0.1".into());
+        args.push("--port".into());
+        args.push(port);
+        log::info!("按 DSH_DESKTOP_BACKEND 启动：{command} {}", args.join(" "));
+        return spawn_child(&command, &args);
+    }
+    let node = find_node().ok_or_else(|| {
+        SpawnError::NotFound("未找到 node.exe。请安装 Node.js 或设置 DSH_NODE 环境变量。".to_string())
+    })?;
+    let bin_js = find_dsh_bin_js().ok_or_else(|| {
+        SpawnError::NotFound(
+            "未找到 @deepseek-ai/dsh。请执行 `npm i -g @deepseek-ai/dsh`，或设置 DSH_BIN 指向 bin.js。"
+                .to_string(),
+        )
+    })?;
+    let args = vec![
+        bin_js.to_string_lossy().into_owned(),
+        "web".into(),
+        "--host".into(),
+        "127.0.0.1".into(),
+        "--port".into(),
+        port,
+    ];
+    spawn_child(&node.to_string_lossy(), &args)
+}
+
+/// 生成本地通知服务器的访问 token（防本机其它进程误触发；非加密学强度）。
+fn random_token() -> String {
+    use std::time::{SystemTime, UNIX_EPOCH};
+    let nanos = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_nanos())
+        .unwrap_or(0);
+    format!("dsh{:x}{:x}", nanos, std::process::id())
+}
+
+/// 启动本地 HTTP 通知服务器（127.0.0.1 随机端口），返回 (端口, token)。
+fn start_notify_server(app: AppHandle) -> (u16, String) {
+    let token = random_token();
+    let listener = match std::net::TcpListener::bind(("127.0.0.1", 0)) {
+        Ok(l) => l,
+        Err(e) => {
+            log::warn!("通知服务器启动失败：{e}");
+            return (0, token);
+        }
+    };
+    let port = listener.local_addr().map(|a| a.port()).unwrap_or(0);
+    listener.set_nonblocking(true).ok();
+    let handle = app.clone();
+    let tok = token.clone();
+    tauri::async_runtime::spawn(async move {
+        let listener = match tokio::net::TcpListener::from_std(listener) {
+            Ok(l) => l,
+            Err(_) => return,
+        };
+        loop {
+            let (mut sock, _) = match listener.accept().await {
+                Ok(x) => x,
+                Err(_) => continue,
+            };
+            let handle = handle.clone();
+            let tok = tok.clone();
+            tauri::async_runtime::spawn(async move {
+                handle_notify_conn(&mut sock, &handle, &tok).await;
+            });
+        }
+    });
+    log::info!("任务完成通知服务器已启动：127.0.0.1:{port}");
+    (port, token)
+}
+
+/// CORS 响应头：注入脚本从 `127.0.0.1:3080` 跨源 fetch 到本桥（随机端口），
+/// `Content-Type: application/json` + `Authorization` 头会触发浏览器 preflight；
+/// 不回 OPTIONS 与 `Access-Control-Allow-*` 头，浏览器会直接拦截实际请求。
+const CORS_HEADERS: &str = "Access-Control-Allow-Origin: *\r\n\
+Access-Control-Allow-Methods: POST, OPTIONS\r\n\
+Access-Control-Allow-Headers: Content-Type, Authorization\r\n\
+Access-Control-Max-Age: 86400\r\n";
+
+/// 处理单条通知连接：先应答 CORS 预检，再校验 Bearer token、解析 JSON body、触发通知。
+async fn handle_notify_conn(sock: &mut tokio::net::TcpStream, app: &AppHandle, token: &str) {
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+    let mut buf = [0u8; 4096];
+    let n = match sock.read(&mut buf).await {
+        Ok(n) if n > 0 => n,
+        _ => return,
+    };
+    let req = String::from_utf8_lossy(&buf[..n]).to_string();
+    if req.starts_with("OPTIONS ") {
+        let _ = sock
+            .write_all(
+                format!("HTTP/1.1 204 No Content\r\nContent-Length: 0\r\n{CORS_HEADERS}\r\n")
+                    .as_bytes(),
+            )
+            .await;
+        return;
+    }
+    if !req.contains(&format!("Bearer {token}")) {
+        let _ = sock
+            .write_all(b"HTTP/1.1 401 Unauthorized\r\nContent-Length: 0\r\n\r\n")
+            .await;
+        return;
+    }
+    let body = req.split("\r\n\r\n").nth(1).unwrap_or("").trim().to_string();
+    let mut msg = "任务已完成".to_string();
+    if let Ok(v) = serde_json::from_str::<serde_json::Value>(&body) {
+        if let Some(s) = v.get("body").and_then(|x| x.as_str()) {
+            msg = s.to_string();
+        }
+    }
+    notify_completed(app, &msg);
+    let _ = sock
+        .write_all(
+            format!("HTTP/1.1 204 No Content\r\nContent-Length: 0\r\n{CORS_HEADERS}\r\n")
+                .as_bytes(),
+        )
+        .await;
+}
+
+/// 收到任务完成信号后的壳侧动作：未读数 +1；仅窗口失焦/隐藏时弹通知并请求注意。
+fn notify_completed(app: &AppHandle, body: &str) {
+    let distracted = app
+        .get_webview_window("main")
+        .map(|w| {
+            let focused = w.is_focused().unwrap_or(true);
+            let visible = w.is_visible().unwrap_or(true);
+            !focused || !visible
+        })
+        .unwrap_or(true);
+    let state = app.state::<DshState>();
+    let unread = state.unread.fetch_add(1, Ordering::SeqCst) + 1;
+    if let Some(w) = app.get_webview_window("main") {
+        let _ = w.set_badge_count(Some(unread as i64));
+        if distracted {
+            let _ = app
+                .notification()
+                .builder()
+                .title("DeepSeek Harness · 任务完成")
+                .body(body)
+                .show();
+            let _ = w.request_user_attention(Some(tauri::UserAttentionType::Informational));
+        }
+    }
+    log::info!("任务完成通知：{}（未读 {unread}，失焦={distracted}）", body);
+}
+
+/// 生成页面侧任务完成监听脚本：轮询"忙碌→空闲"翻转，翻转即上报。
+fn task_notifier_script(port: u16, token: &str) -> String {
+    let js = r#"
+(function(){
+  if (window.__dshNotify) return;
+  window.__dshNotify = true;
+  var PORT = __PORT__, TOKEN = "__TOKEN__";
+  var wasBusy = false, lastFire = 0;
+  function isBusy(){
+    try {
+      if (document.querySelector('[data-state="ongoing"]')) return true;
+      if (document.querySelector('[aria-busy="true"]')) return true;
+    } catch(e){}
+    return false;
+  }
+  function fire(){
+    var now = Date.now();
+    if (now - lastFire < 3000) return;
+    lastFire = now;
+    try {
+      fetch('http://127.0.0.1:'+PORT+'/notify', {
+        method:'POST',
+        headers:{'Content-Type':'application/json','Authorization':'Bearer '+TOKEN},
+        body: JSON.stringify({type:'task-complete', body:'任务已完成，回来看看吧'})
+      });
+    } catch(e){}
+  }
+  setInterval(function(){
+    var b = isBusy();
+    if (wasBusy && !b) fire();
+    wasBusy = b;
+  }, 1000);
+})();
+"#;
+    js.replace("__PORT__", &port.to_string())
+        .replace("__TOKEN__", token)
+}
+
+/// 导航完成后注入任务完成监听（脚本自带守卫，重复注入无害）。
+fn inject_task_notifier(app: AppHandle, port: u16, token: &str) {
+    if port == 0 {
+        return;
+    }
+    let handle = app.clone();
+    let script = task_notifier_script(port, token);
+    tauri::async_runtime::spawn(async move {
+        tokio::time::sleep(Duration::from_millis(2500)).await;
+        if let Some(w) = handle.get_webview_window("main") {
+            if let Err(e) = w.eval(&script) {
+                log::warn!("任务完成监听注入失败：{e}");
+            } else {
+                log::info!("任务完成监听已注入（忙碌→空闲检测）");
+            }
+        }
+    });
+}
+
+/// 轮询等待服务就绪，然后把主窗口导航到 Web GUI；失败则跳错误页。
+async fn wait_ready_and_navigate(app: AppHandle, port: u16, nport: u16, ntoken: String) {
+    let state = app.state::<DshState>();
+    let url = format!("http://127.0.0.1:{port}/");
+    let deadline = Instant::now() + READY_TIMEOUT;
+    loop {
+        if state.spawn_failed.load(Ordering::SeqCst) {
+            // 错误页已由 setup 按具体原因（not-found / spawn-failed）显示，这里不再二次导航
+            return;
+        }
+        if port_open(port) {
+            if let Some(w) = app.get_webview_window("main") {
+                let script = format!("window.location.replace({url:?});");
+                if let Err(e) = w.eval(&script) {
+                    log::warn!("窗口导航失败：{e}");
+                    show_error(&app, "spawn-failed");
+                    return;
+                }
+                // 导航后注入监听：提前注入会落在加载页、随导航销毁
+                inject_task_notifier(app.clone(), nport, &ntoken);
+            }
+            log::info!("本地服务就绪，已导航到 {url}");
+            return;
+        }
+        if Instant::now() >= deadline {
+            log::error!("等待本地服务就绪超时（{}s）", READY_TIMEOUT.as_secs());
+            show_error(&app, "timeout");
+            return;
+        }
+        tokio::time::sleep(Duration::from_millis(500)).await;
+    }
+}
+
+/// 主窗口跳转到本地错误页并发系统通知。
+fn show_error(app: &AppHandle, reason: &str) {
+    if let Some(w) = app.get_webview_window("main") {
+        let target = format!("error.html?reason={reason}");
+        let _ = w.eval(&format!("window.location.replace({target:?});"));
+    }
+    let body = match reason {
+        "not-found" => "未找到 dsh 命令，请按错误页提示安装。",
+        "spawn-failed" => "dsh 进程启动失败，详见日志。",
+        "timeout" => "等待本地服务就绪超时，详见日志。",
+        _ => "未知错误，详见日志。",
+    };
+    let _ = app
+        .notification()
+        .builder()
+        .title("DeepSeek Harness 启动失败")
+        .body(body)
+        .show();
+}
+
+/// 显示并聚焦主窗口。
+fn show_main(app: &AppHandle) {
+    if let Some(w) = app.get_webview_window("main") {
+        let _ = w.show();
+        let _ = w.unminimize();
+        let _ = w.set_focus();
+    }
+}
+
+/// 切换开机自启（Windows 注册表 Run 键）。
+fn toggle_autostart(app: &AppHandle) {
+    let on = app.autolaunch().is_enabled().unwrap_or(false);
+    if on {
+        let _ = app.autolaunch().disable();
+    } else {
+        let _ = app.autolaunch().enable();
+    }
+    log::info!("开机自启已{}", if on { "关闭" } else { "开启" });
+}
+
+/// 构建托盘：左键显示窗口，菜单提供显示/开机自启/退出。
+fn build_tray(app: &tauri::App) -> tauri::Result<()> {
+    let show = MenuItem::with_id(app, "show", "显示主窗口", true, None::<&str>)?;
+    let autostart = MenuItem::with_id(app, "autostart", "开机自启：切换", true, None::<&str>)?;
+    let quit = MenuItem::with_id(app, "quit", "退出", true, None::<&str>)?;
+    let menu = Menu::with_items(app, &[&show, &autostart, &quit])?;
+    TrayIconBuilder::with_id("dsh-tray")
+        .icon(app.default_window_icon().expect("缺少应用图标").clone())
+        .tooltip("DeepSeek Harness")
+        .menu(&menu)
+        .show_menu_on_left_click(false)
+        .on_menu_event(|app, event| match event.id().as_ref() {
+            "show" => show_main(app),
+            "autostart" => toggle_autostart(app),
+            "quit" => {
+                app.state::<DshState>().quitting.store(true, Ordering::SeqCst);
+                app.exit(0);
+            }
+            _ => {}
+        })
+        .on_tray_icon_event(|tray, event| {
+            if let TrayIconEvent::Click {
+                button: MouseButton::Left,
+                button_state: MouseButtonState::Up,
+                ..
+            } = event
+            {
+                show_main(tray.app_handle());
+            }
+        })
+        .build(app)?;
+    Ok(())
+}
+
+pub fn run() {
+    tauri::Builder::default()
+        .plugin(
+            tauri_plugin_log::Builder::new()
+                .targets([
+                    Target::new(TargetKind::Stdout),
+                    Target::new(TargetKind::LogDir {
+                        file_name: Some("dsh-desktop".into()),
+                    }),
+                ])
+                .level(log::LevelFilter::Info)
+                .build(),
+        )
+        .plugin(tauri_plugin_notification::init())
+        .plugin(tauri_plugin_window_state::Builder::default().build())
+        .plugin(tauri_plugin_autostart::Builder::default().build())
+        .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
+            show_main(app);
+        }))
+        .manage(DshState {
+            child: Mutex::new(None),
+            spawned_this_run: AtomicBool::new(false),
+            spawn_failed: AtomicBool::new(false),
+            quitting: AtomicBool::new(false),
+            tray_tip_shown: AtomicBool::new(false),
+            unread: AtomicU32::new(0),
+        })
+        .setup(|app| {
+            let port = app_port();
+            let state = app.state::<DshState>();
+            if port_open(port) {
+                log::info!("127.0.0.1:{port} 已有服务在监听，直接复用现有实例");
+            } else {
+                match spawn_dsh(port) {
+                    Ok(child) => {
+                        log::info!("dsh 子进程已启动（PID {}）", child.id());
+                        *state.child.lock().unwrap() = Some(child);
+                        state.spawned_this_run.store(true, Ordering::SeqCst);
+                    }
+                    Err(SpawnError::NotFound(e)) => {
+                        log::error!("启动 dsh 失败：{e}");
+                        state.spawn_failed.store(true, Ordering::SeqCst);
+                        show_error(app.handle(), "not-found");
+                    }
+                    Err(SpawnError::Other(e)) => {
+                        log::error!("启动 dsh 失败：{e}");
+                        state.spawn_failed.store(true, Ordering::SeqCst);
+                        show_error(app.handle(), "spawn-failed");
+                    }
+                }
+            }
+            // 先起通知桥，把端口/token 交给导航任务；导航完成后再注入监听脚本
+            let (nport, ntoken) = start_notify_server(app.handle().clone());
+            let handle = app.handle().clone();
+            let nav_token = ntoken.clone();
+            tauri::async_runtime::spawn(async move {
+                wait_ready_and_navigate(handle, port, nport, nav_token).await;
+            });
+            // 测试钩子：DSH_DESKTOP_AUTO_QUIT=1 时 8 秒后自动走退出流程（模拟托盘退出，
+            // 验证子进程回收）；设为其它数字 N 时 N 秒后退出（冷启动验收需要更长等待）。
+            if let Some(v) = std::env::var("DSH_DESKTOP_AUTO_QUIT").ok() {
+                let secs = if v == "1" { 8 } else { v.parse::<u64>().unwrap_or(8) };
+                if secs > 0 {
+                    let handle = app.handle().clone();
+                    tauri::async_runtime::spawn(async move {
+                        tokio::time::sleep(Duration::from_secs(secs)).await;
+                        log::info!("[auto-quit] 测试钩子触发退出");
+                        handle
+                            .state::<DshState>()
+                            .quitting
+                            .store(true, Ordering::SeqCst);
+                        handle.exit(0);
+                    });
+                }
+            }
+            // 测试钩子：DSH_DESKTOP_NOTIFY_TEST=1 时延迟触发一次通知（验证通知链路）
+            if std::env::var("DSH_DESKTOP_NOTIFY_TEST").as_deref() == Ok("1") {
+                let handle = app.handle().clone();
+                tauri::async_runtime::spawn(async move {
+                    tokio::time::sleep(Duration::from_secs(6)).await;
+                    notify_completed(&handle, "这是测试通知：任务完成链路验证");
+                });
+            }
+            build_tray(app)?;
+            Ok(())
+        })
+        .on_window_event(|window, event| {
+            if let WindowEvent::CloseRequested { api, .. } = event {
+                let state = window.state::<DshState>();
+                if state.quitting.load(Ordering::SeqCst) {
+                    return; // 托盘退出流程：放行关闭
+                }
+                api.prevent_close();
+                let _ = window.hide();
+                if !state.tray_tip_shown.swap(true, Ordering::SeqCst) {
+                    let _ = window
+                        .app_handle()
+                        .notification()
+                        .builder()
+                        .title("DeepSeek Harness 仍在运行")
+                        .body("窗口已隐藏到系统托盘，点击托盘图标可重新打开；托盘菜单可退出。")
+                        .show();
+                }
+            } else if let WindowEvent::Focused(true) = event {
+                // 用户回到窗口：清零角标与未读数
+                let state = window.state::<DshState>();
+                state.unread.store(0, Ordering::SeqCst);
+                let _ = window.set_badge_count(None);
+            }
+        })
+        .build(tauri::generate_context!())
+        .expect("error while building tauri application")
+        .run(|app, event| match event {
+            RunEvent::ExitRequested { api, .. } => {
+                let quitting = app.state::<DshState>().quitting.load(Ordering::SeqCst);
+                if !quitting {
+                    api.prevent_exit();
+                    if let Some(w) = app.get_webview_window("main") {
+                        let _ = w.hide();
+                    }
+                }
+            }
+            RunEvent::Exit => {
+                let state = app.state::<DshState>();
+                if state.spawned_this_run.load(Ordering::SeqCst) {
+                    if let Some(mut child) = state.child.lock().unwrap().take() {
+                        let pid = child.id();
+                        log::info!("正在停止 dsh 子进程（PID {pid}）");
+                        let _ = child.kill();
+                        let _ = child.wait();
+                        log::info!("dsh 子进程已退出");
+                    }
+                }
+            }
+            _ => {}
+        });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn version_key_parses_semver() {
+        assert_eq!(version_key(std::path::Path::new("v22.12.0")), (22, 12, 0));
+        assert_eq!(version_key(std::path::Path::new("not-a-version")), (0, 0, 0));
+    }
+
+    #[test]
+    fn version_key_orders_correctly() {
+        // 字符串排序会把 v9.11.0 排在 v22.12.0 之后（'9' > '2'）
+        let v9 = version_key(std::path::Path::new("v9.11.0"));
+        let v22 = version_key(std::path::Path::new("v22.12.0"));
+        assert!(v9 < v22);
+    }
+
+    #[test]
+    fn parse_command_json_and_plain() {
+        let (cmd, args) = parse_command(r#"["node","--import","tsx/esm"]"#);
+        assert_eq!(cmd, "node");
+        assert_eq!(args, vec!["--import", "tsx/esm"]);
+        let (cmd, args) = parse_command("node --import tsx/esm");
+        assert_eq!(cmd, "node");
+        assert_eq!(args, vec!["--import", "tsx/esm"]);
+    }
+
+    #[test]
+    fn random_token_nonempty_and_unique() {
+        let a = random_token();
+        let b = random_token();
+        assert!(!a.is_empty());
+        assert_ne!(a, b);
+    }
+}

@@ -1,0 +1,2 @@
+# 独立于仓库 pnpm workspace（同 desktop/ Electron 版策略），避免被根 workspace 吞并。
+packages: []
