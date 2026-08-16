@@ -85,6 +85,8 @@ struct DshState {
     tray_tip_shown: AtomicBool,
     /// 未读任务完成数（Dock 角标）。
     unread: AtomicU32,
+    /// 托盘"开机自启"菜单项（点击切换后同步 label）。
+    autostart_item: Mutex<Option<tauri::menu::MenuItem<tauri::Wry>>>,
 }
 
 /// 解析 `DSH_DESKTOP_BACKEND`：JSON argv 数组，否则空格分隔；返回 (command, args)。
@@ -514,21 +516,48 @@ fn show_main(app: &AppHandle) {
     }
 }
 
-/// 切换开机自启（Windows 注册表 Run 键）。
-fn toggle_autostart(app: &AppHandle) {
-    let on = app.autolaunch().is_enabled().unwrap_or(false);
-    if on {
-        let _ = app.autolaunch().disable();
+/// 开机自启菜单项文案（实时反映当前状态）。
+fn autostart_item_label(enabled: bool) -> &'static str {
+    if enabled {
+        "开机自启：已开启"
     } else {
-        let _ = app.autolaunch().enable();
+        "开机自启：已关闭"
     }
-    log::info!("开机自启已{}", if on { "关闭" } else { "开启" });
 }
 
-/// 构建托盘：左键显示窗口，菜单提供显示/开机自启/退出。
+/// 切换开机自启（Windows 注册表 Run 键），并同步托盘菜单文案。
+fn toggle_autostart(app: &AppHandle) {
+    let on = app.autolaunch().is_enabled().unwrap_or(false);
+    let result = if on {
+        app.autolaunch().disable()
+    } else {
+        app.autolaunch().enable()
+    };
+    match result {
+        Ok(()) => log::info!("开机自启已切换为{}", if on { "关闭" } else { "开启" }),
+        Err(e) => log::error!("切换开机自启失败：{e}"),
+    }
+    if let Some(item) = app
+        .state::<DshState>()
+        .autostart_item
+        .lock()
+        .unwrap()
+        .as_ref()
+    {
+        let _ = item.set_text(autostart_item_label(!on));
+    }
+}
+
+/// 构建托盘：左键显示窗口，菜单提供显示/开机自启（实时状态）/退出。
 fn build_tray(app: &tauri::App) -> tauri::Result<()> {
     let show = MenuItem::with_id(app, "show", "显示主窗口", true, None::<&str>)?;
-    let autostart = MenuItem::with_id(app, "autostart", "开机自启：切换", true, None::<&str>)?;
+    let enabled = app.autolaunch().is_enabled().unwrap_or(false);
+    let autostart = MenuItem::with_id(app, "autostart", autostart_item_label(enabled), true, None::<&str>)?;
+    app.state::<DshState>()
+        .autostart_item
+        .lock()
+        .unwrap()
+        .replace(autostart.clone());
     let quit = MenuItem::with_id(app, "quit", "退出", true, None::<&str>)?;
     let menu = Menu::with_items(app, &[&show, &autostart, &quit])?;
     TrayIconBuilder::with_id("dsh-tray")
@@ -585,6 +614,7 @@ pub fn run() {
             quitting: AtomicBool::new(false),
             tray_tip_shown: AtomicBool::new(false),
             unread: AtomicU32::new(0),
+            autostart_item: Mutex::new(None),
         })
         .setup(|app| {
             let port = app_port();
