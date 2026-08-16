@@ -38,7 +38,7 @@ const AURORA: ThemeDefinition = Object.freeze({
   tokens: AURORA_TOKENS,
 })
 
-/** Nebula: the deep-space tech variant — liquid-glass surfaces + gradient buttons. */
+/** Nebula: the deep-space tech variant — matte acrylic surfaces + gradient buttons. */
 const NEBULA: ThemeDefinition = Object.freeze({
   id: 'nebula',
   colorScheme: 'dark' as const,
