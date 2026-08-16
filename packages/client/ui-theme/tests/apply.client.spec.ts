@@ -175,6 +175,20 @@ describe('ui-theme apply', () => {
     expect(theme.getTheme().preference).toBe('system')
   })
 
+  it('holds a valid preference whose theme registers later (boot ordering)', async () => {
+    const b = await bench()
+    b.setHostPreference('nebula')
+    await b.ctx.plugin({ inject: [...inject], apply }).await()
+    const theme = b.ctx.get('theme') as ThemeRuntime
+    await vi.waitFor(() => { expect(b.describe).toHaveBeenCalledOnce() })
+    // The registrant plugin (ui-theme-custom) has not applied yet: the
+    // preference is held, and the snapshot stays resolvable.
+    expect(theme.getTheme().preference).toBe('system')
+    theme.register({ id: 'nebula', colorScheme: 'dark', tokens: {} })
+    await vi.waitFor(() => { expect(theme.getTheme().preference).toBe('nebula') })
+    expect(theme.getTheme().active.id).toBe('nebula')
+  })
+
   it('recovers after an HMR collapse of the declaring entry (stale disposer must not block)', async () => {
     const b = await bench()
     const host = declareItems(b.slots)

@@ -65,6 +65,38 @@ describe('ThemeRuntime', () => {
     expect(theme.getTheme().preference).toBe('dark')
   })
 
+  it('holds a durable preference for a not-yet-registered theme and catches up on registration', () => {
+    const { theme, events, host } = make()
+    // The settings section may sync before the registrant plugin applies.
+    host.publish({ status: 'ready', value: { preference: 'nebula' }, revision: 1, writable: true })
+    expect(theme.getTheme().preference).toBe('system')
+    expect(theme.getTheme().themes.map(t => t.id)).toEqual(['light', 'dark'])
+    expect(events).toHaveLength(0)
+    theme.register({ id: 'nebula', colorScheme: 'dark', tokens: {} })
+    expect(theme.getTheme().preference).toBe('nebula')
+    expect(theme.getTheme().active.id).toBe('nebula')
+    expect(events).toHaveLength(1)
+    expect(events[0]!.preference).toBe('nebula')
+  })
+
+  it('a user choice while a preference is held beats the later registration', () => {
+    const { theme, host } = make()
+    host.publish({ status: 'ready', value: { preference: 'nebula' }, revision: 1, writable: true })
+    theme.register({ id: 'aurora', colorScheme: 'dark', tokens: {} })
+    theme.setTheme('aurora')
+    theme.register({ id: 'nebula', colorScheme: 'dark', tokens: {} })
+    expect(theme.getTheme().preference).toBe('aurora')
+  })
+
+  it('disposing a theme the registry caught up to resets the preference to default', () => {
+    const { theme, host } = make()
+    host.publish({ status: 'ready', value: { preference: 'nebula' }, revision: 1, writable: true })
+    const dispose = theme.register({ id: 'nebula', colorScheme: 'dark', tokens: {} })
+    dispose()
+    expect(theme.getTheme().preference).toBe('system')
+    expect(theme.getTheme().themes.map(t => t.id)).toEqual(['light', 'dark'])
+  })
+
   it('throws on unknown setTheme ids, duplicate registration, and the system id', () => {
     const { theme } = make()
     expect(() => { theme.setTheme('sepia') }).toThrow('not registered')

@@ -152,6 +152,12 @@ export class ThemeRuntime {
   private readonly host: SettingsScope<ThemeSettings>
   private themes: ThemeDefinition[] = [...BUILTIN_THEMES]
   private preference: ThemePreference
+  /**
+   * Durable preference whose theme has not registered yet. The settings
+   * section may sync before the registrant plugin applies (boot ordering);
+   * the preference is held, never published, until `register` catches up.
+   */
+  private pendingPreference: ThemePreference | undefined
   private revision = 0
   private snapshot: ThemeSnapshot
   private readonly media: MediaQueryList | undefined
@@ -224,16 +230,30 @@ export class ThemeRuntime {
       throw new Error(`theme "${id}" is not registered`)
     }
     if (this.preference === id) return
+    // A user choice is always a registered theme, so no held preference can
+    // outrank it when the held theme registers later.
+    this.pendingPreference = undefined
     this.preference = id as ThemePreference
     if (isThemePreference(id)) void this.host.set(THEME_PREFERENCE_FIELD, id)
     this.publish()
   }
 
-  /** Adopt the scope's accepted durable preference without writing it back. */
+  /**
+   * Adopt the scope's accepted durable preference without writing it back.
+   * A preference naming a theme that has not registered yet is held, not
+   * published: the snapshot must always resolve its active theme.
+   */
   private adopt(): void {
     const section = this.host.getSnapshot().value
-    if (section === undefined || this.preference === section.preference) return
-    this.preference = section.preference
+    if (section === undefined) return
+    const next = section.preference
+    if (next !== 'system' && !this.themes.some(theme => theme.id === next)) {
+      this.pendingPreference = next
+      return
+    }
+    this.pendingPreference = undefined
+    if (this.preference === next) return
+    this.preference = next
     this.publish()
   }
 
@@ -251,6 +271,11 @@ export class ThemeRuntime {
       throw new Error(`theme "${definition.id}" is already registered`)
     }
     this.themes = [...this.themes, definition]
+    if (this.pendingPreference === definition.id) {
+      // The boot race held this durable preference until its theme existed.
+      this.pendingPreference = undefined
+      this.preference = definition.id
+    }
     this.publish()
     return () => {
       if (!this.themes.some(t => t.id === definition.id)) return
@@ -293,8 +318,9 @@ export class ThemeRuntime {
     const resolvedId = this.preference === 'system'
       ? (this.media?.matches === true ? 'dark' : 'light')
       : this.preference
-    // Both built-ins always exist; a registered preference id resolves or has
-    // been reset by its disposer, so the lookup cannot miss.
+    // Both built-ins always exist; a registered preference id resolves, has
+    // been reset by its disposer, or is held pending until its theme
+    // registers, so the lookup cannot miss.
     const active = this.themes.find(t => t.id === resolvedId)
     /* v8 ignore next 2 -- needs a registry without light/dark, which register()/dispose() cannot produce */
     if (active === undefined) throw new Error(`theme registry lost "${resolvedId}"`)
