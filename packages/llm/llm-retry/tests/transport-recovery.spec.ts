@@ -32,7 +32,7 @@ async function start(
 
 async function harness(
   baseURL: string,
-  options: { streamIdleTimeoutMs?: number; initialDelayMs?: number } = {},
+  options: { streamIdleTimeoutMs?: number; initialDelayMs?: number; maxRetries?: number } = {},
 ): Promise<Context> {
   vi.stubEnv('DEEPSEEK_API_KEY', 'mock-key')
   const ctx = new Context()
@@ -42,7 +42,7 @@ async function harness(
     streamIdleTimeoutMs: options.streamIdleTimeoutMs ?? 1_000,
     retryPolicy: {
       mode: 'normal',
-      maxRetries: 2,
+      maxRetries: options.maxRetries ?? 10,
       backoff: {
         initialDelayMs: options.initialDelayMs ?? 10,
         maxDelayMs: options.initialDelayMs ?? 10,
@@ -222,7 +222,7 @@ describe('bounded retry through the real DeepSeek HTTP/SSE adapter', () => {
     const server = await start(['connection_reset', 'connection_reset', 'connection_reset'], {
       apiKey: 'mock-key',
     })
-    context = await harness(server.baseURL)
+    context = await harness(server.baseURL, { initialDelayMs: 10, maxRetries: 2 })
     const agent = context.agentLoop.create(SessionId('wire-exhausted'), {
       provider: 'deepseek-official',
       model: 'mock-model',

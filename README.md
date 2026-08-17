@@ -20,6 +20,7 @@ DeepSeek Harness（`dsh`）是由 [DeepSeek AI](https://deepseek.com) 开发的�
 - **产物文件 diff 统计** — 文件 chip 显示 `+N -M` 并可展开本轮改动（`@deepseek-ai/dsh-client-ui-deliverables-custom` fork）。
 - **aurora / nebula 主题** — 带光晕的科技风主题与圆角像素风按钮。
 - **桌面壳** — Electron 封装（`desktop/`），启动或挂接 `dsh web`。
+- **LLM 重试次数提升** — 默认最大重试次数从 2 次提升到 10 次（`DEFAULT_MAX_RETRIES`），提高在高负载或瞬时故障下的恢复成功率。
 
 ### 同步上游
 

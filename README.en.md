@@ -20,6 +20,7 @@ Custom features on top of official master. Plugin-extracted features merge clean
 - **Produced-files diff stats** — file chips show `+N -M` and expand the round's changes (`@deepseek-ai/dsh-client-ui-deliverables-custom` fork).
 - **aurora / nebula themes** — tech-style themes with glow, plus rounded pixel-style buttons.
 - **Desktop shell** — an Electron wrapper (`desktop/`) that spawns or attaches to `dsh web`.
+- **Increased LLM retry count** — default max retries raised from 2 to 10 (`DEFAULT_MAX_RETRIES`), improving recovery under high load or transient failures.
 
 ### Syncing upstream
 
