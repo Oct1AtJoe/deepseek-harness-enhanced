@@ -342,7 +342,7 @@ async fn handle_notify_conn(sock: &mut tokio::net::TcpStream, app: &AppHandle, t
     if req.starts_with("OPTIONS ") {
         let _ = sock
             .write_all(
-                format!("HTTP/1.1 204 No Content\r\nContent-Length: 0\r\n{CORS_HEADERS}\r\n")
+                format!("HTTP/1.1 204 No Content\r\nConnection: close\r\nContent-Length: 0\r\n{CORS_HEADERS}\r\n")
                     .as_bytes(),
             )
             .await;
@@ -350,28 +350,38 @@ async fn handle_notify_conn(sock: &mut tokio::net::TcpStream, app: &AppHandle, t
     }
     if !req.contains(&format!("Bearer {token}")) {
         let _ = sock
-            .write_all(b"HTTP/1.1 401 Unauthorized\r\nContent-Length: 0\r\n\r\n")
+            .write_all(b"HTTP/1.1 401 Unauthorized\r\nConnection: close\r\nContent-Length: 0\r\n\r\n")
             .await;
         return;
     }
+    log::info!("收到通知桥请求");
     let body = req.split("\r\n\r\n").nth(1).unwrap_or("").trim().to_string();
     let mut msg = "任务已完成".to_string();
+    let mut title: Option<String> = None;
+    let mut force = false;
     if let Ok(v) = serde_json::from_str::<serde_json::Value>(&body) {
         if let Some(s) = v.get("body").and_then(|x| x.as_str()) {
             msg = s.to_string();
         }
+        if let Some(s) = v.get("title").and_then(|x| x.as_str()) {
+            title = Some(s.to_string());
+        }
+        if let Some(b) = v.get("force").and_then(|x| x.as_bool()) {
+            force = b;
+        }
     }
-    notify_completed(app, &msg);
+    notify_completed(app, title.as_deref(), &msg, force);
     let _ = sock
         .write_all(
-            format!("HTTP/1.1 204 No Content\r\nContent-Length: 0\r\n{CORS_HEADERS}\r\n")
+            format!("HTTP/1.1 204 No Content\r\nConnection: close\r\nContent-Length: 0\r\n{CORS_HEADERS}\r\n")
                 .as_bytes(),
         )
         .await;
+    let _ = sock.flush().await;
 }
 
-/// 收到任务完成信号后的壳侧动作：未读数 +1；仅窗口失焦/隐藏时弹通知并请求注意。
-fn notify_completed(app: &AppHandle, body: &str) {
+/// 收到任务完成信号后的壳侧动作：未读数 +1；默认仅窗口失焦/隐藏时弹通知（force 时无条件弹）。
+fn notify_completed(app: &AppHandle, title: Option<&str>, body: &str, force: bool) {
     let distracted = app
         .get_webview_window("main")
         .map(|w| {
@@ -384,27 +394,61 @@ fn notify_completed(app: &AppHandle, body: &str) {
     let unread = state.unread.fetch_add(1, Ordering::SeqCst) + 1;
     if let Some(w) = app.get_webview_window("main") {
         let _ = w.set_badge_count(Some(unread as i64));
-        if distracted {
-            let _ = app
-                .notification()
-                .builder()
-                .title("DeepSeek Harness · 任务完成")
-                .body(body)
-                .show();
-            let _ = w.request_user_attention(Some(tauri::UserAttentionType::Informational));
+        if distracted || force {
+            // ponytail: tauri-winrt-notification 直连（notify-rust 在 Windows 上忽略 icon 字段），
+            // 显式设置左上角图标，不依赖 AUMID 的快捷方式图标解析。
+            let mut toast = tauri_winrt_notification::Toast::new("ai.deepseek.harness.desktop")
+            .title(title.unwrap_or("DeepSeek Harness · 任务完成"))
+            .text1(body);
+            if let Ok(icon_path) = std::env::var("LOCALAPPDATA") {
+                let icon = std::path::PathBuf::from(&icon_path)
+                    .join("ai.deepseek.harness.desktop")
+                    .join("icon.png");
+                if icon.exists() {
+                    toast = toast.icon(
+                        &icon,
+                        tauri_winrt_notification::IconCrop::Square,
+                        "DeepSeek Harness",
+                    );
+                }
+            }
+            match toast.show() {
+                Ok(()) => log::info!("toast 已发送（title={:?}, force={force}）", title),
+                Err(e) => log::error!("toast 发送失败：{e}"),
+            }
+            if distracted {
+                let _ = w.request_user_attention(Some(tauri::UserAttentionType::Informational));
+            }
         }
     }
     log::info!("任务完成通知：{}（未读 {unread}，失焦={distracted}）", body);
 }
 
-/// 生成页面侧任务完成监听脚本：轮询"忙碌→空闲"翻转，翻转即上报。
+/// 生成页面侧任务完成监听脚本：暴露通知桥（页面插件可复用），并轮询"忙碌→空闲"翻转上报。
 fn task_notifier_script(port: u16, token: &str) -> String {
     let js = r#"
 (function(){
   if (window.__dshNotify) return;
   window.__dshNotify = true;
   var PORT = __PORT__, TOKEN = "__TOKEN__";
-  var wasBusy = false, lastFire = 0;
+  window.__dshNotifyBridge = {
+    port: PORT,
+    token: TOKEN,
+    _last: 0,
+    fire: function(payload) {
+      var now = Date.now();
+      if (now - this._last < 4000) return;
+      this._last = now;
+      console.info('[dsh-bridge] firing', {port: PORT, payload: payload});
+      fetch('http://127.0.0.1:'+PORT+'/notify', {
+        method:'POST',
+        headers:{'Content-Type':'application/json','Authorization':'Bearer '+TOKEN},
+        body: JSON.stringify(payload)
+      }).then(function(r){ console.info('[dsh-bridge] response', r.status); })
+        .catch(function(e){ console.error('[dsh-bridge] fetch failed', e); });
+    }
+  };
+  var wasBusy = false;
   function isBusy(){
     try {
       if (document.querySelector('[data-state="ongoing"]')) return true;
@@ -412,21 +456,9 @@ fn task_notifier_script(port: u16, token: &str) -> String {
     } catch(e){}
     return false;
   }
-  function fire(){
-    var now = Date.now();
-    if (now - lastFire < 3000) return;
-    lastFire = now;
-    try {
-      fetch('http://127.0.0.1:'+PORT+'/notify', {
-        method:'POST',
-        headers:{'Content-Type':'application/json','Authorization':'Bearer '+TOKEN},
-        body: JSON.stringify({type:'task-complete', body:'任务已完成，回来看看吧'})
-      });
-    } catch(e){}
-  }
   setInterval(function(){
     var b = isBusy();
-    if (wasBusy && !b) fire();
+    if (wasBusy && !b) window.__dshNotifyBridge.fire({type:'task-complete', body:'任务已完成，回来看看吧'});
     wasBusy = b;
   }, 1000);
 })();
@@ -559,7 +591,8 @@ fn build_tray(app: &tauri::App) -> tauri::Result<()> {
         .unwrap()
         .replace(autostart.clone());
     let quit = MenuItem::with_id(app, "quit", "退出", true, None::<&str>)?;
-    let menu = Menu::with_items(app, &[&show, &autostart, &quit])?;
+    let devtools = MenuItem::with_id(app, "devtools", "开发者工具", true, None::<&str>)?;
+    let menu = Menu::with_items(app, &[&show, &autostart, &devtools, &quit])?;
     TrayIconBuilder::with_id("dsh-tray")
         .icon(app.default_window_icon().expect("缺少应用图标").clone())
         .tooltip("DeepSeek Harness")
@@ -568,6 +601,11 @@ fn build_tray(app: &tauri::App) -> tauri::Result<()> {
         .on_menu_event(|app, event| match event.id().as_ref() {
             "show" => show_main(app),
             "autostart" => toggle_autostart(app),
+            "devtools" => {
+                if let Some(w) = app.get_webview_window("main") {
+                    w.open_devtools();
+                }
+            }
             "quit" => {
                 app.state::<DshState>().quitting.store(true, Ordering::SeqCst);
                 app.exit(0);
@@ -588,7 +626,123 @@ fn build_tray(app: &tauri::App) -> tauri::Result<()> {
     Ok(())
 }
 
+/// 注册当前进程 AUMID + 注册表 DisplayName/IconUri（builder 前调用，logger 未初始化，用 eprintln）。
+fn register_aumid() {
+    use windows::core::PCWSTR;
+    use windows::Win32::UI::Shell::SetCurrentProcessExplicitAppUserModelID;
+
+    extern "system" {
+        fn RegCreateKeyExW(hkey: isize, sub: *const u16, res: u32, cls: *const u16, opt: u32, sam: u32, sec: *const u8, out: *mut isize, disp: *mut u32) -> i32;
+        fn RegSetValueExW(hkey: isize, name: *const u16, res: u32, kind: u32, data: *const u8, len: u32) -> i32;
+        fn RegCloseKey(hkey: isize) -> i32;
+    }
+    let aumid = "ai.deepseek.harness.desktop";
+    let display_name = "DeepSeek Harness";
+
+    let aumid_w: Vec<u16> = aumid.encode_utf16().chain(std::iter::once(0)).collect();
+    unsafe {
+        let _ = SetCurrentProcessExplicitAppUserModelID(PCWSTR(aumid_w.as_ptr()));
+    }
+
+    let icon_bytes = include_bytes!("../icons/128x128.png");
+    let icon_path = std::env::var("LOCALAPPDATA")
+        .map(|d| std::path::PathBuf::from(d).join("ai.deepseek.harness.desktop").join("icon.png"))
+        .unwrap_or_else(|_| std::path::PathBuf::from("icon.png"));
+    let _ = std::fs::create_dir_all(icon_path.parent().unwrap_or(std::path::Path::new(".")));
+    let _ = std::fs::write(&icon_path, icon_bytes);
+
+    const HKCU: isize = 0x8000_0001u32 as isize;
+    const KEY_WRITE: u32 = 0x20006;
+    const REG_SZ: u32 = 1;
+    let sub: Vec<u16> = format!("Software\\Classes\\AppUserModelId\\{aumid}\0").encode_utf16().collect();
+    let dn_name: Vec<u16> = "DisplayName\0".encode_utf16().collect();
+    let dn_val: Vec<u16> = format!("{display_name}\0").encode_utf16().collect();
+    let icon_name: Vec<u16> = "IconUri\0".encode_utf16().collect();
+    let icon_val: Vec<u16> = icon_path.to_string_lossy().encode_utf16().chain(std::iter::once(0)).collect();
+    let mut hkey: isize = 0;
+    unsafe {
+        RegCreateKeyExW(HKCU, sub.as_ptr(), 0, std::ptr::null(), 0, KEY_WRITE, std::ptr::null(), &mut hkey, std::ptr::null_mut());
+        if hkey != 0 {
+            RegSetValueExW(hkey, dn_name.as_ptr(), 0, REG_SZ, dn_val.as_ptr() as *const u8, (dn_val.len() * 2) as u32);
+            RegSetValueExW(hkey, icon_name.as_ptr(), 0, REG_SZ, icon_val.as_ptr() as *const u8, (icon_val.len() * 2) as u32);
+            RegCloseKey(hkey);
+            eprintln!("[dsh] AUMID 注册表已写入：{aumid}，图标：{}", icon_path.display());
+        }
+    }
+}
+
+/// 创建/更新开始菜单快捷方式并写入 AppUserModelID（setup 中调用，logger 可用）。
+/// 每次启动重写，保证便携版挪动后快捷方式仍指向最新 exe。
+fn ensure_shortcut() {
+    use windows::core::*;
+    use windows::Win32::System::Com::StructuredStorage::PROPVARIANT;
+    use windows::Win32::System::Com::{
+        CoCreateInstance, CoInitializeEx, CoUninitialize, CLSCTX_INPROC_SERVER,
+        COINIT_APARTMENTTHREADED, IPersistFile,
+    };
+    use windows::Win32::System::Variant::VT_LPWSTR;
+    use windows::Win32::UI::Shell::PropertiesSystem::{
+        GPS_READWRITE, IPropertyStore, SHGetPropertyStoreFromParsingName,
+    };
+    use windows::Win32::UI::Shell::{SHGetKnownFolderPath, FOLDERID_Programs, IShellLinkW, ShellLink};
+    use windows::Win32::Storage::EnhancedStorage::PKEY_AppUserModel_ID;
+
+    let shortcut_path = match unsafe { SHGetKnownFolderPath(&FOLDERID_Programs, Default::default(), None) } {
+        Ok(p) => std::path::PathBuf::from(unsafe { p.to_string() }.unwrap_or_default()).join("DeepSeek Harness.lnk"),
+        Err(_) => {
+            log::warn!("无法获取开始菜单路径，跳过快捷方式创建");
+            return;
+        }
+    };
+
+    unsafe {
+        let _ = CoInitializeEx(None, COINIT_APARTMENTTHREADED);
+        // 1) IShellLink 创建/更新快捷方式（SetPath + Save）
+        let link_result: windows::core::Result<()> = (|| {
+            let link: IShellLinkW = CoCreateInstance(&ShellLink, None, CLSCTX_INPROC_SERVER)?;
+            let exe = std::env::current_exe().unwrap_or_default();
+            link.SetPath(&HSTRING::from(exe.to_string_lossy().as_ref()))?;
+            link.SetDescription(&HSTRING::from("DeepSeek Harness"))?;
+            let persist: IPersistFile = link.cast()?;
+            persist.Save(&HSTRING::from(shortcut_path.to_string_lossy().as_ref()), true)?;
+            Ok(())
+        })();
+        if let Err(e) = link_result {
+            log::warn!("快捷方式创建失败：{e}");
+            CoUninitialize();
+            return;
+        }
+        // 2) SHGetPropertyStoreFromParsingName 打开 .lnk 文件的属性存储写 AppUserModelID
+        //    （IShellLink 自带的 IPropertyStore 不落盘，官方推荐路径是解析文件属性存储）
+        let prop_result: windows::core::Result<()> = (|| {
+            let store: IPropertyStore = SHGetPropertyStoreFromParsingName(
+                &HSTRING::from(shortcut_path.to_string_lossy().as_ref()),
+                None,
+                GPS_READWRITE,
+            )?;
+            // ponytail: 字节级构造 PROPVARIANT（vt=31 LPWSTR + 偏移8 指针），
+            // 绕开 windows-rs union/ManuallyDrop 字段赋值限制。
+            let key = PKEY_AppUserModel_ID;
+            let aumid_w: Vec<u16> = "ai.deepseek.harness.desktop".encode_utf16().chain(std::iter::once(0)).collect();
+            let mut pv_bytes = [0u8; 24];
+            pv_bytes[..2].copy_from_slice(&VT_LPWSTR.0.to_le_bytes());
+            pv_bytes[8..16].copy_from_slice(&(aumid_w.as_ptr() as usize).to_le_bytes());
+            let pv_ptr = pv_bytes.as_ptr() as *const PROPVARIANT;
+            store.SetValue(&key, &*pv_ptr)?;
+            store.Commit()?;
+            Ok(())
+        })();
+        match prop_result {
+            Ok(()) => log::info!("快捷方式已更新：{}", shortcut_path.display()),
+            Err(e) => log::warn!("快捷方式 AUMID 写入失败：{e}"),
+        }
+        CoUninitialize();
+    }
+}
+
 pub fn run() {
+    register_aumid();
+
     tauri::Builder::default()
         .plugin(
             tauri_plugin_log::Builder::new()
@@ -669,10 +823,11 @@ pub fn run() {
                 let handle = app.handle().clone();
                 tauri::async_runtime::spawn(async move {
                     tokio::time::sleep(Duration::from_secs(6)).await;
-                    notify_completed(&handle, "这是测试通知：任务完成链路验证");
+                    notify_completed(&handle, None, "这是测试通知：任务完成链路验证", false);
                 });
             }
             build_tray(app)?;
+            ensure_shortcut();
             Ok(())
         })
         .on_window_event(|window, event| {
