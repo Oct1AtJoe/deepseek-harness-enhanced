@@ -290,6 +290,7 @@
     { "path": "./packages/host/skill-manager" },
     { "path": "./packages/host/subagent-manager" },
     { "path": "./packages/host/webserver" },
+    { "path": "./packages/client/dsh-notification-custom/tsconfig.host.json" },
     { "path": "./packages/sdk/client" },
     { "path": "./packages/sdk/protocol" },
     { "path": "./packages/lsp/lsp" },

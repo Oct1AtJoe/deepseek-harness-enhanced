@@ -7,7 +7,7 @@ import { createAssistantMessage } from '@deepseek-ai/dsh-llm'
 import type { SessionEvent, SessionEventMap, SessionEventType } from '@deepseek-ai/dsh-session'
 import { describe, expect, it } from 'vitest'
 import type { NotificationProjectionValue } from '../src/contract.ts'
-import { EMPTY_PROJECTION, applyProjectionEvent, boundText, notificationProjection, type NotificationProjectionState } from '../src/projection.ts'
+import { EMPTY_PROJECTION, applyProjectionEvent, boundText, notificationProjection, type NotificationEvent, type NotificationProjectionState } from '../src/projection.ts'
 import type { ResolvedConfig } from '../src/types.ts'
 
 function evt<K extends SessionEventType>(type: K, data: SessionEventMap[K]): SessionEvent<K> {
@@ -32,7 +32,8 @@ function config(overrides: Partial<ResolvedConfig> = {}): ResolvedConfig {
 
 function fold(events: readonly SessionEvent[], cfg: ResolvedConfig): NotificationProjectionValue {
   let state: NotificationProjectionState = { openTurn: null, last: null }
-  for (const event of events) state = applyProjectionEvent(state, event, cfg.maxBodyChars)
+  // The fold narrows each handled case with a local cast (see projection.ts).
+  for (const event of events) state = applyProjectionEvent(state, event as unknown as NotificationEvent, cfg.maxBodyChars)
   return notificationProjection(cfg).view(state)
 }
 
