@@ -356,21 +356,14 @@ async fn handle_notify_conn(sock: &mut tokio::net::TcpStream, app: &AppHandle, t
     }
     log::info!("收到通知桥请求");
     let body = req.split("\r\n\r\n").nth(1).unwrap_or("").trim().to_string();
-    let mut msg = "任务已完成".to_string();
-    let mut title: Option<String> = None;
-    let mut force = false;
-    if let Ok(v) = serde_json::from_str::<serde_json::Value>(&body) {
-        if let Some(s) = v.get("body").and_then(|x| x.as_str()) {
-            msg = s.to_string();
-        }
-        if let Some(s) = v.get("title").and_then(|x| x.as_str()) {
-            title = Some(s.to_string());
-        }
-        if let Some(b) = v.get("force").and_then(|x| x.as_bool()) {
-            force = b;
-        }
-    }
-    notify_completed(app, title.as_deref(), &msg, force);
+    let payload = parse_notify_payload(&body);
+    notify_completed(
+        app,
+        payload.title.as_deref(),
+        &payload.body,
+        payload.force,
+        payload.session_id.as_deref(),
+    );
     let _ = sock
         .write_all(
             format!("HTTP/1.1 204 No Content\r\nConnection: close\r\nContent-Length: 0\r\n{CORS_HEADERS}\r\n")
@@ -380,8 +373,62 @@ async fn handle_notify_conn(sock: &mut tokio::net::TcpStream, app: &AppHandle, t
     let _ = sock.flush().await;
 }
 
+/// 通知桥请求体的解析结果（dsh-notification 插件经 shim 上报）。
+#[derive(Debug, PartialEq)]
+struct NotifyPayload {
+    title: Option<String>,
+    body: String,
+    force: bool,
+    /// 会话 id：toast 被点击后跳转到该会话；缺省 = 仅聚焦窗口。
+    session_id: Option<String>,
+}
+
+/// 解析通知桥 JSON 请求体；缺字段取默认值，整体非 JSON 时回退到全默认。
+fn parse_notify_payload(body: &str) -> NotifyPayload {
+    let Ok(v) = serde_json::from_str::<serde_json::Value>(body) else {
+        return NotifyPayload {
+            title: None,
+            body: "任务已完成".to_string(),
+            force: false,
+            session_id: None,
+        };
+    };
+    NotifyPayload {
+        title: v.get("title").and_then(|x| x.as_str()).map(str::to_string),
+        body: v
+            .get("body")
+            .and_then(|x| x.as_str())
+            .unwrap_or("任务已完成")
+            .to_string(),
+        force: v.get("force").and_then(|x| x.as_bool()).unwrap_or(false),
+        session_id: v
+            .get("sessionId")
+            .and_then(|x| x.as_str())
+            .map(str::to_string),
+    }
+}
+
+/// 通知点击后的会话跳转脚本：派发 `dsh:open-session` CustomEvent，
+/// dsh-notification-custom 插件（浏览器半）监听后调用 `ctx.sessions.open`。
+fn open_session_script(session_id: &str) -> String {
+    let quoted = serde_json::to_string(session_id).unwrap_or_else(|_| "\"\"".to_string());
+    format!(
+        "window.dispatchEvent(new CustomEvent('dsh:open-session', {{ detail: {{ sessionId: {quoted} }} }}));"
+    )
+}
+
+/// 通知被点击：聚焦主窗口，并把会话跳转事件派发给页面。
+fn open_session(app: &AppHandle, session_id: &str) {
+    if let Some(w) = app.get_webview_window("main") {
+        if let Err(e) = w.eval(&open_session_script(session_id)) {
+            log::warn!("会话跳转事件派发失败：{e}");
+        }
+    }
+}
+
 /// 收到任务完成信号后的壳侧动作：未读数 +1；默认仅窗口失焦/隐藏时弹通知（force 时无条件弹）。
-fn notify_completed(app: &AppHandle, title: Option<&str>, body: &str, force: bool) {
+/// 携带 session_id 时给 toast 挂点击回调：点击后聚焦窗口并跳转到对应会话。
+fn notify_completed(app: &AppHandle, title: Option<&str>, body: &str, force: bool, session_id: Option<&str>) {
     let distracted = app
         .get_webview_window("main")
         .map(|w| {
@@ -398,9 +445,19 @@ fn notify_completed(app: &AppHandle, title: Option<&str>, body: &str, force: boo
             // ponytail: tauri-winrt-notification 直连（notify-rust 在 Windows 上忽略 icon 字段）。
             // 不设 appLogoOverride 图标：Win11 会把它渲染成内容区大图；左上角图标由
             // AUMID 解析（注册表 IconUri / 快捷方式图标）提供。
-            let toast = tauri_winrt_notification::Toast::new("ai.deepseek.harness.desktop")
+            let mut toast = tauri_winrt_notification::Toast::new("ai.deepseek.harness.desktop")
                 .title(title.unwrap_or("DeepSeek Harness · 任务完成"))
                 .text1(body);
+            if let Some(sid) = session_id {
+                let handle = app.clone();
+                let target = sid.to_string();
+                toast = toast.on_activated(move |_action| {
+                    log::info!("toast 点击激活（session={target}）");
+                    show_main(&handle);
+                    open_session(&handle, &target);
+                    Ok(())
+                });
+            }
             match toast.show() {
                 Ok(()) => log::info!("toast 已发送（title={:?}, force={force}）", title),
                 Err(e) => log::error!("toast 发送失败：{e}"),
@@ -453,6 +510,7 @@ fn bridge_init_script(port: u16, token: &str) -> String {
           title: title,
           body: (options && options.body) || '',
           tag: (options && options.tag) || '',
+          sessionId: (options && options.sessionId) || '',
           requireInteraction: !!(options && options.requireInteraction),
           force: true
         });
@@ -567,11 +625,20 @@ fn show_error(app: &AppHandle, reason: &str) {
 }
 
 /// 显示并聚焦主窗口。
+/// 窗口刚从隐藏恢复时立即 set_focus 可能被前台锁拒绝（后台进程无输入链权限），
+/// 延时补一次——tao 的 force_window_active 带 Alt 键抢焦点 hack，第二次调用更稳。
 fn show_main(app: &AppHandle) {
     if let Some(w) = app.get_webview_window("main") {
         let _ = w.show();
         let _ = w.unminimize();
         let _ = w.set_focus();
+        let handle = app.clone();
+        tauri::async_runtime::spawn(async move {
+            tokio::time::sleep(Duration::from_millis(250)).await;
+            if let Some(win) = handle.get_webview_window("main") {
+                let _ = win.set_focus();
+            }
+        });
     }
 }
 
@@ -785,7 +852,8 @@ pub fn run() {
         .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_window_state::Builder::default().build())
         .plugin(tauri_plugin_autostart::Builder::default().build())
-        .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
+        .plugin(tauri_plugin_single_instance::init(|app, args, _cwd| {
+            log::info!("收到第二实例请求（args={args:?}），显示主窗口");
             show_main(app);
         }))
         .manage(DshState {
@@ -863,7 +931,7 @@ pub fn run() {
                 let handle = app.handle().clone();
                 tauri::async_runtime::spawn(async move {
                     tokio::time::sleep(Duration::from_secs(6)).await;
-                    notify_completed(&handle, None, "这是测试通知：任务完成链路验证", false);
+                    notify_completed(&handle, None, "这是测试通知：任务完成链路验证", false, None);
                 });
             }
             build_tray(app)?;
@@ -956,5 +1024,54 @@ mod tests {
         let b = random_token();
         assert!(!a.is_empty());
         assert_ne!(a, b);
+    }
+
+    #[test]
+    fn parse_notify_payload_reads_all_fields() {
+        let p = parse_notify_payload(r#"{"title":"t","body":"b","force":true,"sessionId":"s-1"}"#);
+        assert_eq!(
+            p,
+            NotifyPayload {
+                title: Some("t".into()),
+                body: "b".into(),
+                force: true,
+                session_id: Some("s-1".into()),
+            }
+        );
+    }
+
+    #[test]
+    fn parse_notify_payload_defaults_and_rejects_non_json() {
+        let p = parse_notify_payload(r#"{"body":"b"}"#);
+        assert_eq!(
+            p,
+            NotifyPayload {
+                title: None,
+                body: "b".into(),
+                force: false,
+                session_id: None,
+            }
+        );
+        let p = parse_notify_payload("not json");
+        assert_eq!(
+            p,
+            NotifyPayload {
+                title: None,
+                body: "任务已完成".into(),
+                force: false,
+                session_id: None,
+            }
+        );
+    }
+
+    #[test]
+    fn open_session_script_quotes_session_id() {
+        assert_eq!(
+            open_session_script("s-1"),
+            "window.dispatchEvent(new CustomEvent('dsh:open-session', { detail: { sessionId: \"s-1\" } }));"
+        );
+        // 引号/反斜杠走 JSON 转义，不会破坏脚本字符串。
+        let escaped = open_session_script("a\"b");
+        assert!(escaped.contains("sessionId: \"a\\\"b\""));
     }
 }

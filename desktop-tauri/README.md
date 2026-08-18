@@ -20,6 +20,9 @@ Tauri 全家桶不进仓库安装与门禁）。
    导航后再注入 `data-state="ongoing"` 忙碌→空闲轮询，经本地 HTTP 桥
    （随机端口 + Bearer token，含 CORS 预检应答）上报，窗口失焦/隐藏时才弹系统通知；
    桥请求体支持 `title` 与 `force`（`force: true` 时无条件弹）；
+   插件把 `sessionId` 透传进桥请求体时，toast 挂点击回调：点击后聚焦窗口，并向页面派发
+   `dsh:open-session` CustomEvent（`detail.sessionId`），由 dsh-notification-custom 插件的
+   浏览器半监听并调用 `ctx.sessions.open` 跳转到对应会话；无 `sessionId` 时点击仅聚焦窗口；
 6. 退出只回收本次启动的 dsh 子进程，复用的已有实例不受影响。
 
 ## 运行
