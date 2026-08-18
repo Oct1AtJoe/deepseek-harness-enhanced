@@ -14,7 +14,7 @@ client: session list completion reminder (live, dedup) + persisted settings
 ## Local patch (vs upstream)
 
 - **Notification body uses the session title instead of the model reply text**: `src/client/runner.ts` returns `body: title ?? ''`. When the title is empty the empty-body fallback text is used.
-- **Desktop shell integration**: the Tauri shell (`desktop-tauri/` in this repository) injects a WebView2 shim (`window.Notification` reports `permission: granted` and the constructor fires the shell's local HTTP notification bridge) so the unmodified browser-half code path emits a Windows toast. See `desktop-tauri/README.md`.
+- **Desktop shell integration**: the Tauri shell (`desktop-tauri/` in this repository) injects a WebView2 shim (`window.Notification` reports `permission: granted` and the constructor fires the shell's local HTTP notification bridge) so the unmodified browser-half code path emits a Windows toast. This fork additionally passes the session id through the notification options: clicking the toast focuses the window and the shell dispatches a `dsh:open-session` event this plugin listens for, opening that session in the GUI. See `desktop-tauri/README.md`.
 
 ## Mount
 
@@ -79,7 +79,7 @@ pnpm --filter @deepseek-ai/dsh-notification-custom bundle
 - Notifications require the page to be open (they surface while the page is hidden, but not after the tab is closed). In the desktop shell they route through the shell's notification bridge and appear as Windows toasts.
 - Notifications fire once per finished turn (a running→idle edge on any session); a completion that happened while the page was disconnected is not re-notified on reconnect.
 - The rule subject is the session title plus the last turn's reply text and tool names — earlier turns are not matched.
-- Notification body is a flat text snippet; the click action only focuses the window (no deep link to the turn).
+- Notification body is a flat text snippet; clicking a notification focuses the window and, when a session id was attached, selects that session in the GUI (no deep link to the exact turn).
 
 ## License
 

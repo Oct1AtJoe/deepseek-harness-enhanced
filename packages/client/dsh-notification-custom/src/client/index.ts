@@ -18,7 +18,7 @@ import { NS, en, zh } from './locales.ts'
 import { adoptStyles } from './styles.ts'
 import { createNotificationSettingsStore } from './store.ts'
 import { notificationFor, pendingAdvance, pendingNotificationFor, projectionAdvance } from './runner.ts'
-import { bodyText, notificationsApi, pendingTitleKey, shouldShow, titleKey } from './notifier.ts'
+import { bodyText, notificationOptions, notificationsApi, pendingTitleKey, shouldShow, titleKey } from './notifier.ts'
 
 /** Required services: the session list, slots, and locale. */
 export const inject = ['sessions', 'slots', 'locale']
@@ -26,6 +26,8 @@ export const inject = ['sessions', 'slots', 'locale']
 /** The slice of the sessions service this plugin reads. */
 interface SessionsListFace {
   readonly list: { getSnapshot(): SessionListState; subscribe(listener: () => void): () => void }
+  /** Open a session in the GUI (unknown ids fail loud — call sites guard). */
+  open(id: SessionId): void
 }
 
 type SessionId = SessionListState['ids'][number]
@@ -47,23 +49,37 @@ export function apply(ctx: ClientContext): void {
   const sessions = ctx.get('sessions') as unknown as SessionsListFace
   const settings: SnapshotStore<NotificationSettings> = createNotificationSettingsStore()
   const set = (patch: Partial<NotificationSettings>): void => {
-    settings.update(draft => { Object.assign(draft, patch) })
+    settings.update((draft) => { Object.assign(draft, patch) })
   }
   const requestPermission = (): Promise<NotificationPermission> =>
     notificationsApi()?.requestPermission() ?? Promise.resolve<NotificationPermission>('denied')
 
-  const show = (title: string, body: string, tag: string, requireInteraction: boolean): void => {
+  // Click-to-open: a notification click focuses the window and, when the
+  // session is known, selects it in the GUI. The desktop shell's toast
+  // activation dispatches the same `dsh:open-session` event on this page.
+  const openSession = (id: SessionId | undefined): void => {
+    if (id === undefined) return
+    try {
+      sessions.open(id)
+    } catch (error) {
+      console.warn(`[dsh-notification] 打开会话 ${id} 失败：${error instanceof Error ? error.message : String(error)}`)
+    }
+  }
+  const show = (title: string, body: string, tag: string, sessionId: SessionId | undefined, requireInteraction: boolean): void => {
     const api = notificationsApi()
     if (api === undefined || api.permission !== 'granted') return
-    const notification = new api(title, { body, tag, requireInteraction })
-    notification.onclick = () => { window.focus() }
+    const notification = new api(title, notificationOptions(body, tag, requireInteraction, sessionId))
+    notification.onclick = () => {
+      window.focus()
+      openSession(sessionId)
+    }
   }
   const sendTest = (): void => {
     // A unique tag per click: the browser replaces same-tag notifications, and a
     // stale same-tag entry lingering in the Windows notification center silently
     // swallows every later notification with that tag. A fresh tag per test
     // guarantees the toast always shows.
-    show(t('notify.testTitle'), t('notify.testBody'), `dsh-notification-test-${Date.now()}`, false)
+    show(t('notify.testTitle'), t('notify.testBody'), `dsh-notification-test-${Date.now()}`, undefined, false)
   }
 
   // Completion runner: the host projection's turn is monotonic per session,
@@ -103,6 +119,7 @@ export function apply(ctx: ClientContext): void {
             t(titleKey(plan.reason)),
             bodyText(plan.body, t('notify.emptyBody')),
             plan.tag,
+            id,
             current.requireInteraction,
           )
         }
@@ -166,6 +183,7 @@ export function apply(ctx: ClientContext): void {
             t(pendingTitleKey(plan.kind)),
             bodyText(plan.body, t('notify.pendingBody')),
             plan.tag,
+            id,
             current.requireInteraction,
           )
         }
@@ -174,6 +192,18 @@ export function apply(ctx: ClientContext): void {
     })
     return () => { off(); stopReset() }
   }, 'dsh-notification: pending runner')
+
+  // Desktop shell click-to-jump: the Tauri toast activation calls back into the
+  // page with a `dsh:open-session` CustomEvent carrying the session id; plain
+  // browsers never emit it and the listener is a harmless no-op there.
+  ctx.effect(() => {
+    const onOpenSession = (event: Event): void => {
+      const detail = (event as CustomEvent<{ sessionId?: string } | undefined>).detail
+      openSession(detail?.sessionId as SessionId | undefined)
+    }
+    window.addEventListener('dsh:open-session', onOpenSession)
+    return () => { window.removeEventListener('dsh:open-session', onOpenSession) }
+  }, 'dsh-notification: shell session-open listener')
 
   // The settings section: master switch, permission card, outcome toggles, rules, advanced.
   ctx.slots.inject('settings.section', () => ctx.slots.register({

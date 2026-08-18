@@ -68,3 +68,22 @@ export function pendingNotificationTag(sessionId: string, sequence: number): str
 export function notificationsApi(): typeof Notification | undefined {
   return typeof Notification === 'undefined' ? undefined : Notification
 }
+
+/** Notification options plus the plugin-private wire field the desktop shell's shim reads. */
+export interface BridgeNotificationOptions extends NotificationOptions {
+  /**
+   * The session that produced this notification: clicking it opens that session
+   * in the GUI. The Tauri shell (injected `window.Notification` shim) forwards
+   * it to the shell's toast bridge; standard browsers ignore the unknown key.
+   */
+  readonly sessionId?: string
+}
+
+/**
+ * Assemble the options passed to `new Notification`, attaching the session id
+ * when known. The shim/bridge path reads `options.sessionId` at construction
+ * time; native browsers just ignore it.
+ */
+export function notificationOptions(body: string, tag: string, requireInteraction: boolean, sessionId?: string): BridgeNotificationOptions {
+  return { body, tag, requireInteraction, ...(sessionId === undefined ? {} : { sessionId }) }
+}

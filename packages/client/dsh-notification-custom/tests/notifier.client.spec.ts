@@ -3,7 +3,7 @@
  * permission/background gate, and the per-session grouping tag.
  */
 import { describe, expect, it } from 'vitest'
-import { bodyText, notificationTag, pendingNotificationTag, pendingTitleKey, shouldShow, titleKey } from '../src/client/notifier.ts'
+import { bodyText, notificationOptions, notificationTag, pendingNotificationTag, pendingTitleKey, shouldShow, titleKey } from '../src/client/notifier.ts'
 
 describe('titleKey', () => {
   it('maps every reason to its title key', () => {
@@ -61,5 +61,22 @@ describe('pendingTitleKey', () => {
     expect(pendingTitleKey('approval')).toBe('notify.titleApproval')
     expect(pendingTitleKey('question')).toBe('notify.titleQuestion')
     expect(pendingTitleKey('plan-review')).toBe('notify.titlePlanReview')
+  })
+})
+
+describe('notificationOptions', () => {
+  it('carries the browser fields plus the bridge sessionId wire field', () => {
+    expect(notificationOptions('body', 'tag', true, 'session-1')).toEqual({
+      body: 'body',
+      tag: 'tag',
+      requireInteraction: true,
+      sessionId: 'session-1',
+    })
+  })
+
+  it('omits the sessionId key when the session is unknown', () => {
+    const options = notificationOptions('body', 'tag', false)
+    expect('sessionId' in options).toBe(false)
+    expect(options).toEqual({ body: 'body', tag: 'tag', requireInteraction: false })
   })
 })

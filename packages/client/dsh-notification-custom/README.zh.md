@@ -14,7 +14,7 @@ client: 会话列表完成提醒（实时、去重）+ 持久化设置
 ## 本地补丁（相对上游）
 
 - **通知正文使用会话标题而非模型回复内容**：`src/client/runner.ts` 返回 `body: title ?? ''`。标题为空时使用空正文兜底文案。
-- **桌面壳集成**：本仓库的 Tauri 壳（`desktop-tauri/`）注入 WebView2 shim（`window.Notification` 恒报 `permission: granted`，构造器触发壳子本地 HTTP 通知桥），浏览器半代码零改动即可弹 Windows toast。见 `desktop-tauri/README.md`。
+- **桌面壳集成**：本仓库的 Tauri 壳（`desktop-tauri/`）注入 WebView2 shim（`window.Notification` 恒报 `permission: granted`，构造器触发壳子本地 HTTP 通知桥），浏览器半代码零改动即可弹 Windows toast。本 fork 另把会话 id 透传到通知 options：点击 toast 时壳子聚焦窗口，并向页面派发本插件监听的 `dsh:open-session` 事件，在 GUI 里打开对应会话。见 `desktop-tauri/README.md`。
 
 ## 挂载
 
@@ -79,7 +79,7 @@ pnpm --filter @deepseek-ai/dsh-notification-custom bundle
 - 通知需要页面处于打开状态（页面在后台时可弹，但关闭标签页后不再弹）。桌面壳下通知走壳子的通知桥，以 Windows toast 呈现。
 - 通知在每轮结束（任意会话的 running→idle 边沿）触发一次；断线期间完成的轮次在重连后不会补发。
 - 规则匹配对象为会话标题 + 最近一轮的回复文本与工具名，不匹配更早的轮次。
-- 通知正文是纯文本摘要；点击仅聚焦窗口（不深链到具体轮次）。
+- 通知正文是纯文本摘要；点击通知会聚焦窗口，携带会话 id 时还会在 GUI 里选中该会话（不深链到具体轮次）。
 
 ## License
 
