@@ -395,23 +395,12 @@ fn notify_completed(app: &AppHandle, title: Option<&str>, body: &str, force: boo
     if let Some(w) = app.get_webview_window("main") {
         let _ = w.set_badge_count(Some(unread as i64));
         if distracted || force {
-            // ponytail: tauri-winrt-notification 直连（notify-rust 在 Windows 上忽略 icon 字段），
-            // 显式设置左上角图标，不依赖 AUMID 的快捷方式图标解析。
-            let mut toast = tauri_winrt_notification::Toast::new("ai.deepseek.harness.desktop")
-            .title(title.unwrap_or("DeepSeek Harness · 任务完成"))
-            .text1(body);
-            if let Ok(icon_path) = std::env::var("LOCALAPPDATA") {
-                let icon = std::path::PathBuf::from(&icon_path)
-                    .join("ai.deepseek.harness.desktop")
-                    .join("icon.png");
-                if icon.exists() {
-                    toast = toast.icon(
-                        &icon,
-                        tauri_winrt_notification::IconCrop::Square,
-                        "DeepSeek Harness",
-                    );
-                }
-            }
+            // ponytail: tauri-winrt-notification 直连（notify-rust 在 Windows 上忽略 icon 字段）。
+            // 不设 appLogoOverride 图标：Win11 会把它渲染成内容区大图；左上角图标由
+            // AUMID 解析（注册表 IconUri / 快捷方式图标）提供。
+            let toast = tauri_winrt_notification::Toast::new("ai.deepseek.harness.desktop")
+                .title(title.unwrap_or("DeepSeek Harness · 任务完成"))
+                .text1(body);
             match toast.show() {
                 Ok(()) => log::info!("toast 已发送（title={:?}, force={force}）", title),
                 Err(e) => log::error!("toast 发送失败：{e}"),
