@@ -23,7 +23,11 @@ Tauri 全家桶不进仓库安装与门禁）。
    插件把 `sessionId` 透传进桥请求体时，toast 挂点击回调：点击后聚焦窗口，并向页面派发
    `dsh:open-session` CustomEvent（`detail.sessionId`），由 dsh-notification-custom 插件的
    浏览器半监听并调用 `ctx.sessions.open` 跳转到对应会话；无 `sessionId` 时点击仅聚焦窗口；
-6. 退出只回收本次启动的 dsh 子进程，复用的已有实例不受影响。
+6. 外部链接处理（与 Electron 版行为对齐）：`target=_blank`/`window.open` 新窗口请求与
+   应用 origin（`http://127.0.0.1:<port>`）之外的 http(s) 主框架导航，一律交给系统默认
+   浏览器打开（`ShellExecuteW`，不经 cmd 解析），壳内不允许打开外部页面；
+   Tauri 应用协议（Windows 上为 `http://tauri.localhost`）视为应用内放行；
+7. 退出只回收本次启动的 dsh 子进程，复用的已有实例不受影响。
 
 ## 运行
 

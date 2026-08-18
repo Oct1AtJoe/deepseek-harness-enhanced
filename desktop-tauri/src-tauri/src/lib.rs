@@ -110,6 +110,35 @@ fn port_open(port: u16) -> bool {
     .is_ok()
 }
 
+/// 判断 URL 是否为本应用 origin（`http://127.0.0.1:<port>`）。
+fn is_app_origin(url: &tauri::Url, port: u16) -> bool {
+    url.scheme() == "http" && url.host_str() == Some("127.0.0.1") && url.port() == Some(port)
+}
+
+/// 用系统默认浏览器打开 URL（ShellExecuteW；不经 cmd 解析，URL 含 `&`/`%` 不会被破坏）。
+fn open_in_browser(url: &str) {
+    use windows::core::PCWSTR;
+    use windows::Win32::UI::Shell::ShellExecuteW;
+    use windows::Win32::UI::WindowsAndMessaging::SW_SHOWNORMAL;
+    let wide: Vec<u16> = url.encode_utf16().chain(std::iter::once(0)).collect();
+    let result = unsafe {
+        ShellExecuteW(
+            None,
+            windows::core::w!("open"),
+            PCWSTR(wide.as_ptr()),
+            PCWSTR::null(),
+            PCWSTR::null(),
+            SW_SHOWNORMAL,
+        )
+    };
+    if result.0 as usize <= 32 {
+        // SE_ERR_* 错误码区间 0..=32
+        log::warn!("外部链接打开失败（{url}）：error={}", result.0 as usize);
+    } else {
+        log::info!("外部链接已交由系统默认浏览器打开：{url}");
+    }
+}
+
 /// 定位 node.exe（DSH_NODE / PATH / nvm-windows / 官方安装器）。
 fn find_node() -> Option<PathBuf> {
     if let Ok(p) = std::env::var("DSH_NODE") {
@@ -886,8 +915,11 @@ pub fn run() {
         .setup(|app| {
             // 通知桥先起：端口/token 要写进窗口初始化脚本，窗口创建前必须就绪
             let (nport, ntoken) = start_notify_server(app.handle().clone());
+            let port = app_port();
             // 主窗口改为代码创建：initialization_script 在文档解析前注入
             // Notification shim + 通知桥（WebView2 无 Web Notification 权限机制）
+            // 外部链接处理与 Electron 版对齐：target=_blank/新窗口请求与跨源导航
+            // 一律交给系统默认浏览器，壳内不允许打开应用 origin 之外的页面。
             let _window = tauri::WebviewWindowBuilder::new(
                 app,
                 "main",
@@ -899,8 +931,28 @@ pub fn run() {
             .center()
             .drag_and_drop(false)
             .initialization_script(bridge_init_script(nport, &ntoken))
+            .on_navigation(move |url| {
+                if is_app_origin(url, port) {
+                    return true;
+                }
+                // Windows 上 Tauri 应用协议（内置页面）呈现为 http://tauri.localhost，属应用内
+                if url.host_str() == Some("tauri.localhost") {
+                    return true;
+                }
+                if url.scheme() == "http" || url.scheme() == "https" {
+                    open_in_browser(url.as_str());
+                    false
+                } else {
+                    true
+                }
+            })
+            .on_new_window(move |url, _features| {
+                if url.scheme() == "http" || url.scheme() == "https" {
+                    open_in_browser(url.as_str());
+                }
+                tauri::webview::NewWindowResponse::Deny
+            })
             .build()?;
-            let port = app_port();
             let state = app.state::<DshState>();
             if port_open(port) {
                 log::info!("127.0.0.1:{port} 已有服务在监听，直接复用现有实例");
@@ -1024,6 +1076,17 @@ mod tests {
         let v9 = version_key(std::path::Path::new("v9.11.0"));
         let v22 = version_key(std::path::Path::new("v22.12.0"));
         assert!(v9 < v22);
+    }
+
+    #[test]
+    fn is_app_origin_matches_app_only() {
+        assert!(is_app_origin(&tauri::Url::parse("http://127.0.0.1:3080/chat").unwrap(), 3080));
+        // 端口不同（其它本地服务）不是应用 origin
+        assert!(!is_app_origin(&tauri::Url::parse("http://127.0.0.1:9999/").unwrap(), 3080));
+        // 外部站点、https、非 http 协议都不是
+        assert!(!is_app_origin(&tauri::Url::parse("https://example.com/").unwrap(), 3080));
+        assert!(!is_app_origin(&tauri::Url::parse("https://127.0.0.1:3080/").unwrap(), 3080));
+        assert!(!is_app_origin(&tauri::Url::parse("tauri://localhost/").unwrap(), 3080));
     }
 
     #[test]

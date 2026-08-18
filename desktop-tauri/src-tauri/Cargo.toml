@@ -14,7 +14,7 @@ tauri-build = { version = "2", features = [] }
 
 [dependencies]
 tauri = { version = "2", features = ["tray-icon", "image-png", "devtools"] }
-windows = { version = "0.61", features = ["Win32_Foundation", "Win32_System_Com", "Win32_System_Variant", "Win32_UI_Shell", "Win32_UI_Shell_PropertiesSystem", "Win32_Storage_EnhancedStorage"] }
+windows = { version = "0.61", features = ["Win32_Foundation", "Win32_System_Com", "Win32_System_Variant", "Win32_UI_Shell", "Win32_UI_Shell_PropertiesSystem", "Win32_UI_WindowsAndMessaging", "Win32_Storage_EnhancedStorage"] }
 tauri-plugin-autostart = "2"
 tauri-plugin-log = "2"
 tauri-plugin-notification = "2"
