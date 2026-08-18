@@ -55,6 +55,9 @@ packages/util/output-retention/src/*.js
 packages/util/output-retention/src/*.js.map
 packages/util/output-retention/src/*.d.ts
 packages/util/output-retention/src/*.d.ts.map
+packages/host/skill-manager/src/*.js
+packages/host/skill-manager/src/*.js.map
+packages/host/skill-manager/src/*.d.ts
 packages/host/skill-manager/src/*.d.ts.map
 packages/host/subagent-manager/src/*.js
 packages/host/subagent-manager/src/*.js.map
