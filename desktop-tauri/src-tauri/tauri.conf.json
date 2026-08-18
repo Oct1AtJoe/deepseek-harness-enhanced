@@ -7,18 +7,6 @@
     "frontendDist": "../src"
   },
   "app": {
-    "windows": [
-      {
-        "label": "main",
-        "title": "DeepSeek Harness",
-        "width": 1440,
-        "height": 900,
-        "minWidth": 900,
-        "minHeight": 600,
-        "center": true,
-        "dragDropEnabled": false
-      }
-    ],
     "security": {
       "csp": null
     }

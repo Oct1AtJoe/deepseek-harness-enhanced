@@ -413,13 +413,15 @@ fn notify_completed(app: &AppHandle, title: Option<&str>, body: &str, force: boo
     log::info!("任务完成通知：{}（未读 {unread}，失焦={distracted}）", body);
 }
 
-/// 生成页面侧任务完成监听脚本：暴露通知桥（页面插件可复用），并轮询"忙碌→空闲"翻转上报。
-fn task_notifier_script(port: u16, token: &str) -> String {
+/// WebView2 初始化脚本：文档解析前（页面脚本执行前）注入 Notification API shim 与通知桥。
+/// Windows 底层等价 AddScriptToExecuteOnDocumentCreated，跨所有导航（含远程 URL）持久生效。
+fn bridge_init_script(port: u16, token: &str) -> String {
     let js = r#"
 (function(){
-  if (window.__dshNotify) return;
-  window.__dshNotify = true;
+  if (window.__dshNotifyShim) return;
+  window.__dshNotifyShim = true;
   var PORT = __PORT__, TOKEN = "__TOKEN__";
+  // 通知桥：页面与壳子本地 HTTP 桥（POST /notify + Bearer token，4s 节流去重）
   window.__dshNotifyBridge = {
     port: PORT,
     token: TOKEN,
@@ -428,17 +430,52 @@ fn task_notifier_script(port: u16, token: &str) -> String {
       var now = Date.now();
       if (now - this._last < 4000) return;
       this._last = now;
-      console.info('[dsh-bridge] firing', {port: PORT, payload: payload});
-      fetch('http://127.0.0.1:'+PORT+'/notify', {
-        method:'POST',
-        headers:{'Content-Type':'application/json','Authorization':'Bearer '+TOKEN},
-        body: JSON.stringify(payload)
-      }).then(function(r){ console.info('[dsh-bridge] response', r.status); })
-        .catch(function(e){ console.error('[dsh-bridge] fetch failed', e); });
+      try {
+        fetch('http://127.0.0.1:'+PORT+'/notify', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + TOKEN },
+          body: JSON.stringify(payload)
+        });
+      } catch(e){}
     }
   };
+  // WebView2 无 Web Notification 权限机制：替换为恒 granted 的 shim，
+  // 构造器直接触发通知桥——原版插件（new Notification(...)）无需任何改动即可弹系统 toast。
+  function ShimNotification(title, options) {
+    this.title = title;
+    this.options = options || {};
+    this.onclick = null;
+    var bridge = window.__dshNotifyBridge;
+    if (bridge && bridge.fire) {
+      try {
+        bridge.fire({
+          type: 'dsh-notification',
+          title: title,
+          body: (options && options.body) || '',
+          tag: (options && options.tag) || '',
+          requireInteraction: !!(options && options.requireInteraction),
+          force: true
+        });
+      } catch(e){}
+    }
+  }
+  ShimNotification.permission = 'granted';
+  ShimNotification.requestPermission = function() { return Promise.resolve('granted'); };
+  window.Notification = ShimNotification;
+})();
+"#;
+    js.replace("__PORT__", &port.to_string())
+        .replace("__TOKEN__", token)
+}
+
+/// 生成页面侧任务完成监听脚本：轮询"忙碌→空闲"翻转，翻转即经已注入的 __dshNotifyBridge 上报。
+fn task_notifier_script() -> String {
+    let js = r#"
+(function(){
+  if (window.__dshNotifyHeuristic) return;
+  window.__dshNotifyHeuristic = true;
   var wasBusy = false;
-  function isBusy(){
+  function isBusy() {
     try {
       if (document.querySelector('[data-state="ongoing"]')) return true;
       if (document.querySelector('[aria-busy="true"]')) return true;
@@ -447,22 +484,23 @@ fn task_notifier_script(port: u16, token: &str) -> String {
   }
   setInterval(function(){
     var b = isBusy();
-    if (wasBusy && !b) window.__dshNotifyBridge.fire({type:'task-complete', body:'任务已完成，回来看看吧'});
+    if (wasBusy && !b && window.__dshNotifyBridge) {
+      window.__dshNotifyBridge.fire({type: 'task-complete', body: '任务已完成，回来看看吧'});
+    }
     wasBusy = b;
   }, 1000);
 })();
 "#;
-    js.replace("__PORT__", &port.to_string())
-        .replace("__TOKEN__", token)
+    js.to_string()
 }
 
-/// 导航完成后注入任务完成监听（脚本自带守卫，重复注入无害）。
-fn inject_task_notifier(app: AppHandle, port: u16, token: &str) {
+/// 导航完成后注入任务完成启发式监听（桥与 shim 已由初始化脚本注入，脚本自带守卫，重复注入无害）。
+fn inject_task_notifier(app: AppHandle, port: u16) {
     if port == 0 {
         return;
     }
     let handle = app.clone();
-    let script = task_notifier_script(port, token);
+    let script = task_notifier_script();
     tauri::async_runtime::spawn(async move {
         tokio::time::sleep(Duration::from_millis(2500)).await;
         if let Some(w) = handle.get_webview_window("main") {
@@ -476,7 +514,7 @@ fn inject_task_notifier(app: AppHandle, port: u16, token: &str) {
 }
 
 /// 轮询等待服务就绪，然后把主窗口导航到 Web GUI；失败则跳错误页。
-async fn wait_ready_and_navigate(app: AppHandle, port: u16, nport: u16, ntoken: String) {
+async fn wait_ready_and_navigate(app: AppHandle, port: u16, nport: u16) {
     let state = app.state::<DshState>();
     let url = format!("http://127.0.0.1:{port}/");
     let deadline = Instant::now() + READY_TIMEOUT;
@@ -493,8 +531,8 @@ async fn wait_ready_and_navigate(app: AppHandle, port: u16, nport: u16, ntoken: 
                     show_error(&app, "spawn-failed");
                     return;
                 }
-                // 导航后注入监听：提前注入会落在加载页、随导航销毁
-                inject_task_notifier(app.clone(), nport, &ntoken);
+                // 导航后注入启发式监听：桥与 shim 已由初始化脚本在文档创建时注入
+                inject_task_notifier(app.clone(), nport);
             }
             log::info!("本地服务就绪，已导航到 {url}");
             return;
@@ -760,6 +798,22 @@ pub fn run() {
             autostart_item: Mutex::new(None),
         })
         .setup(|app| {
+            // 通知桥先起：端口/token 要写进窗口初始化脚本，窗口创建前必须就绪
+            let (nport, ntoken) = start_notify_server(app.handle().clone());
+            // 主窗口改为代码创建：initialization_script 在文档解析前注入
+            // Notification shim + 通知桥（WebView2 无 Web Notification 权限机制）
+            let _window = tauri::WebviewWindowBuilder::new(
+                app,
+                "main",
+                tauri::WebviewUrl::App("index.html".into()),
+            )
+            .title("DeepSeek Harness")
+            .inner_size(1440.0, 900.0)
+            .min_inner_size(900.0, 600.0)
+            .center()
+            .drag_and_drop(false)
+            .initialization_script(bridge_init_script(nport, &ntoken))
+            .build()?;
             let port = app_port();
             let state = app.state::<DshState>();
             if port_open(port) {
@@ -783,12 +837,9 @@ pub fn run() {
                     }
                 }
             }
-            // 先起通知桥，把端口/token 交给导航任务；导航完成后再注入监听脚本
-            let (nport, ntoken) = start_notify_server(app.handle().clone());
             let handle = app.handle().clone();
-            let nav_token = ntoken.clone();
             tauri::async_runtime::spawn(async move {
-                wait_ready_and_navigate(handle, port, nport, nav_token).await;
+                wait_ready_and_navigate(handle, port, nport).await;
             });
             // 测试钩子：DSH_DESKTOP_AUTO_QUIT=1 时 8 秒后自动走退出流程（模拟托盘退出，
             // 验证子进程回收）；设为其它数字 N 时 N 秒后退出（冷启动验收需要更长等待）。

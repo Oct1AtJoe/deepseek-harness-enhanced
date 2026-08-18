@@ -13,11 +13,13 @@ Tauri 全家桶不进仓库安装与门禁）。
    （`DSH_NODE` / `DSH_BIN` / PATH / nvm-windows / Program Files）；
 3. 轮询服务就绪（500ms 间隔，60s 超时）后从加载页导航到 Web GUI；
 4. 托盘常驻：关闭窗口仅隐藏（首次有通知提示），左键唤起，菜单可切换开机自启与退出；
-5. 任务完成通知：注入 JS 暴露通知桥 `window.__dshNotifyBridge`（`port`/`token`/`fire(payload)`，
-   4s 节流去重）并监听 `data-state="ongoing"` 忙碌→空闲翻转，经本地 HTTP 桥
+5. 任务完成通知：窗口初始化脚本（`initialization_script`，文档解析前注入、跨导航持久）先注入
+   通知桥 `window.__dshNotifyBridge`（`port`/`token`/`fire(payload)`，4s 节流去重）与
+   Web Notification shim（WebView2 无浏览器通知权限：permission 恒报 granted，构造器
+   `new Notification(...)` 直接触发桥——原版 dsh-notification 插件零改动可用），
+   导航后再注入 `data-state="ongoing"` 忙碌→空闲轮询，经本地 HTTP 桥
    （随机端口 + Bearer token，含 CORS 预检应答）上报，窗口失焦/隐藏时才弹系统通知；
-   桥请求体支持 `title` 与 `force`（`force: true` 时无条件弹），
-   `dsh-notification` 插件在 Tauri 下经此桥弹 toast（浏览器 Web Notification API 在 WebView2 不可用）；
+   桥请求体支持 `title` 与 `force`（`force: true` 时无条件弹）；
 6. 退出只回收本次启动的 dsh 子进程，复用的已有实例不受影响。
 
 ## 运行

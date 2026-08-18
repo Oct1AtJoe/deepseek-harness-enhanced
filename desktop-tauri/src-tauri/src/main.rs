@@ -1,5 +1,5 @@
-// Prevents additional console window on Windows in release, DO NOT REMOVE!!
-#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
+// Prevents additional console window on Windows (debug 构建同样生效，避免打开 exe 时弹出 cmd)
+#![windows_subsystem = "windows"]
 
 fn main() {
     dsh_desktop_lib::run()
