@@ -625,21 +625,39 @@ fn show_error(app: &AppHandle, reason: &str) {
 }
 
 /// 显示并聚焦主窗口。
-/// 窗口刚从隐藏恢复时立即 set_focus 可能被前台锁拒绝（后台进程无输入链权限），
-/// 延时补一次——tao 的 force_window_active 带 Alt 键抢焦点 hack，第二次调用更稳。
+/// toast 点击回调运行在 winrt 事件线程，窗口操作必须经 run_on_main_thread
+/// 派发到主线程执行；show/unminimize/set_focus 的返回与窗口状态落日志，
+/// 供"点击通知不弹窗"场景定位。
 fn show_main(app: &AppHandle) {
-    if let Some(w) = app.get_webview_window("main") {
-        let _ = w.show();
-        let _ = w.unminimize();
-        let _ = w.set_focus();
-        let handle = app.clone();
-        tauri::async_runtime::spawn(async move {
-            tokio::time::sleep(Duration::from_millis(250)).await;
-            if let Some(win) = handle.get_webview_window("main") {
-                let _ = win.set_focus();
-            }
-        });
+    let handle = app.clone();
+    let dispatched = app.run_on_main_thread(move || {
+        let Some(w) = handle.get_webview_window("main") else {
+            log::warn!("show_main：未找到 main 窗口");
+            return;
+        };
+        log::info!("show_main 前：visible={:?} focused={:?}", w.is_visible(), w.is_focused());
+        let show = w.show();
+        let unmin = w.unminimize();
+        let focus = w.set_focus();
+        log::info!(
+            "show_main 结果：show={} unminimize={} set_focus={}",
+            show.is_ok(),
+            unmin.is_ok(),
+            focus.is_ok()
+        );
+    });
+    if let Err(e) = dispatched {
+        log::warn!("show_main 主线程派发失败：{e}");
     }
+    // 窗口刚从隐藏恢复时立即 set_focus 可能被前台锁拒绝（后台进程无输入链权限），
+    // 延时补一次——tao 的 force_window_active 带 Alt 键抢焦点 hack，第二次调用更稳。
+    let handle = app.clone();
+    tauri::async_runtime::spawn(async move {
+        tokio::time::sleep(Duration::from_millis(250)).await;
+        if let Some(win) = handle.get_webview_window("main") {
+            let _ = win.set_focus();
+        }
+    });
 }
 
 /// 开机自启菜单项文案（实时反映当前状态）。
