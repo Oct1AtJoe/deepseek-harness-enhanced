@@ -1,0 +1,29 @@
+{
+  "characters": {
+    "kanye": {
+      "name": "Kanye West",
+      "credit": "UFO Abduction Sticker",
+      "meta": {
+        "stageSize": 256
+      },
+      "states": {
+        "idle":          { "sheet": "idle.v2.png",          "frames": 3, "fps": 2,  "playback": "blink" },
+        "working":       { "sheet": "working.v2.png",       "frames": 3, "fps": 3,  "playback": "loop" },
+        "celebrate":     { "sheet": "celebrate.v2.png",     "frames": 3, "fps": 4,  "playback": "loop" },
+        "error":         { "sheet": "error.v2.png",         "frames": 3, "fps": 6,  "playback": "loop" },
+        "disappointed":  { "sheet": "disappointed.v2.png",  "frames": 3, "fps": 2,  "playback": "loop" },
+        "joy":           { "sheet": "joy.v2.png",           "frames": 3, "fps": 5,  "playback": "loop" },
+        "eat":           { "sheet": "eat.v2.png",           "frames": 3, "fps": 3,  "playback": "loop" },
+        "play":          { "sheet": "play.v2.png",          "frames": 3, "fps": 4,  "playback": "loop" },
+        "drag":          { "sheet": "drag.v2.png",          "frames": 1, "fps": 1,  "playback": "once", "motion": "wiggle" },
+        "walk":          { "sheet": "walk.v2.png",          "frames": 8, "fps": 8,  "playback": "loop" },
+        "sleep":         { "sheet": "sleep.v2.png",         "frames": 3, "fps": 1,  "playback": "loop" },
+        "wake":          { "sheet": "wake.v2.png",          "frames": 3, "fps": 3,  "playback": "loop" },
+        "welcome":       { "sheet": "welcome.v2.png",       "frames": 5, "fps": 4,  "playback": "loop" },
+        "think":         { "sheet": "think.v2.png",         "frames": 3, "fps": 2,  "playback": "loop" },
+        "wait":          { "sheet": "wait.v2.png",          "frames": 3, "fps": 2,  "playback": "loop" }
+      }
+    }
+  },
+  "default": "kanye"
+}
