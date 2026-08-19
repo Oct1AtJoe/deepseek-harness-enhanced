@@ -6,7 +6,7 @@ Status: implemented
 
 ## Problem
 
-`write` 和 `edit` 工具为其 call 和 result 都声明了 `card: 'diff'`（[render-intent union](../architecture/2026-07-02-tool-render-intent-union.md)）：call view 携带从参数推导的预期改动，result view 携带已应用的上下文 hunk（`FileDiff[]`，由 `packages/fs/tool-fs/src/diff.ts` 计算，并持久化在 result `meta` 中以便回放重建）。该视图早已抵达浏览器 —— host、connection、runtime 将它作为 `callView`/`resultView` 投递到 `ConversationSnapshot` —— TUI 也已将其渲染为按文件分组的 `+`/`-` 块加 `+A -R · N file(s)` 页脚。
+`write` 和 `edit` 工具为其 call 和 result 都声明了 `card: 'diff'`（[render-intent union](../architecture/2026-07-02-tool-render-intent-union.md)）：call view 携带从参数推导的预期改动，result view 携带已应用的纯变更行 hunk（`FileDiff[]`，由 `packages/fs/tool-fs/src/diff.ts` 计算，并持久化在 result `meta` 中以便回放重建）。该视图早已抵达浏览器 —— host、connection、runtime 将它作为 `callView`/`resultView` 投递到 `ConversationSnapshot` —— TUI 也已将其渲染为按文件分组的 `+`/`-` 块加 `+A -R · N file(s)` 页脚。
 
 Web 客户端忽略了它。write/edit 调用落到 `GenericToolCard`，其行从原始工具参数推导，详情面板把 result 的 content block 摊平进一个 `<pre>`。`diffs` 载荷 —— result 的全部意义 —— 被丢弃，于是一次文件改动读起来只是一行确认、看不到任何改动。
 
@@ -55,3 +55,4 @@ fixture（`packages/client/connection/src/client/fixture.ts`）携带三个 diff
 - [Web terminal 卡片](2026-07-28-web-terminal-card.md) —— `terminal` 支路的同一套四层结构；本 note 复用其内联输出决策与头尾上限算术。
 - [工具调用呈现的标签化 render-intent union](../architecture/2026-07-02-tool-render-intent-union.md) —— 本改动消费的 `card` 标签词汇；Web 客户端现在也是 `diff` 支路的消费者。
 - [Web 客户端架构](../architecture/2026-07-19-gui-web-client-architecture.md) —— 两个渲染点所处的 slot 与快照分层。
+- [应用的 diff hunk 只携带变更行](../bug-fix/2026-08-19-diff-hunks-carry-change-lines-only.md) —— result view 的 hunk 只携带变更行；卡片直接从两段文本数出 `+A -R`。

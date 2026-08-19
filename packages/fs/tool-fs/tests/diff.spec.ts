@@ -1,25 +1,25 @@
 /**
- * Unit tests for the result-time contextual-diff computation (`src/diff.ts`):
+ * Unit tests for the result-time diff computation (`src/diff.ts`):
  * the pure before/after → {@link FileDiff}[] hunk builder and the defensive
- * `meta` narrowing. These pin the exact hunk reconstruction (context lines,
+ * `meta` narrowing. These pin the exact hunk reconstruction (change-only lines,
  * multi-hunk replaceAll, pure insertion/deletion, no-op) that UIs render.
  */
 
 import { describe, expect, it } from 'vitest'
-import { computeHunkDiffs, diffsFromMeta, DIFF_CONTEXT } from '../src/diff.ts'
+import { computeHunkDiffs, diffsFromMeta } from '../src/diff.ts'
 import type { JsonValue } from '@deepseek-ai/dsh-session'
 
 const lines = (n: number): string => Array.from({ length: n }, (_, i) => `line${i + 1}`).join('\n') + '\n'
 
 describe('computeHunkDiffs', () => {
-  it('a single-line change yields one hunk with ±context lines on both sides', () => {
+  it('a single-line change yields one hunk with only the change lines', () => {
     const before = lines(8)
     const after = before.replace('line4', 'CHANGED')
     const diffs = computeHunkDiffs('f.txt', before, after)
     expect(diffs).toEqual([{
       path: 'f.txt',
-      oldText: 'line1\nline2\nline3\nline4\nline5\nline6\nline7',
-      newText: 'line1\nline2\nline3\nCHANGED\nline5\nline6\nline7',
+      oldText: 'line4',
+      newText: 'CHANGED',
     }])
   })
 
@@ -29,10 +29,10 @@ describe('computeHunkDiffs', () => {
     const diffs = computeHunkDiffs('f.txt', before, after)
     expect(diffs).toHaveLength(2)
     expect(diffs[0]?.path).toBe('f.txt')
-    expect(diffs[0]?.oldText).toContain('line3')
-    expect(diffs[0]?.newText).toContain('A')
-    expect(diffs[1]?.oldText).toContain('line16')
-    expect(diffs[1]?.newText).toContain('B')
+    expect(diffs[0]?.oldText).toBe('line3')
+    expect(diffs[0]?.newText).toBe('A')
+    expect(diffs[1]?.oldText).toBe('line16')
+    expect(diffs[1]?.newText).toBe('B')
     // The two hunks are distinct sites, not one merged block.
     expect(diffs[0]?.newText).not.toContain('B')
     expect(diffs[1]?.newText).not.toContain('A')
@@ -60,15 +60,13 @@ describe('computeHunkDiffs', () => {
     expect(diffs[0]?.newText).not.toContain('\\')
   })
 
-  it('uses DIFF_CONTEXT (3) surrounding lines', () => {
-    expect(DIFF_CONTEXT).toBe(3)
+  it('carries no surrounding context lines (a UI counts +A -R from the texts directly)', () => {
     const before = lines(20)
     const after = before.replace('line10', 'CHANGED')
     const [diff] = computeHunkDiffs('f.txt', before, after)
-    // 3 context above (7,8,9) + the change + 3 below (11,12,13) = 7 lines a side.
-    expect(diff?.oldText?.split('\n')).toHaveLength(7)
-    expect(diff?.newText.split('\n')).toHaveLength(7)
-    expect(diff?.oldText?.split('\n')[0]).toBe('line7')
+    // The hunk is the change alone: no context above or below rides along.
+    expect(diff?.oldText).toBe('line10')
+    expect(diff?.newText).toBe('CHANGED')
   })
 })
 

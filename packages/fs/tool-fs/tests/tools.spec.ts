@@ -596,9 +596,11 @@ describe('tool-owned presentation (pure presentCall)', () => {
   })
 })
 
-describe('result-time contextual diff (meta + presentResult)', () => {
-  // An edit records the applied contextual hunk on `tool/result` meta, and the tool's
-  // presentResult narrows it back into a replayable `diff` result card.
+describe('result-time applied diff (meta + presentResult)', () => {
+  // An edit records the applied hunk on `tool/result` meta, and the tool's
+  // presentResult narrows it back into a replayable `diff` result card. The
+  // hunk carries the change's own lines only (no context), so the UI counts
+  // `+A -R` straight from the two texts.
   const withContext = 'a\nb\nc\nOLD\nd\ne\nf\n'
 
   it('edit: execute attaches the applied hunk as meta { diffs }', async () => {
@@ -609,7 +611,7 @@ describe('result-time contextual diff (meta + presentResult)', () => {
     const result = await call(ctx, 'edit', { file_path: 'a.txt', old_string: 'OLD', new_string: 'NEW' }, { session })
     expect(result.isError).toBe(false)
     expect(result.meta).toEqual({
-      diffs: [{ path: 'a.txt', oldText: 'a\nb\nc\nOLD\nd\ne\nf', newText: 'a\nb\nc\nNEW\nd\ne\nf' }],
+      diffs: [{ path: 'a.txt', oldText: 'OLD', newText: 'NEW' }],
     })
   })
 
@@ -622,20 +624,20 @@ describe('result-time contextual diff (meta + presentResult)', () => {
     const view = ctx.tools.get('edit')?.presentResult?.({ file_path: 'a.txt', old_string: 'OLD', new_string: 'NEW' }, result)
     expect(view).toEqual({
       card: 'diff', title: 'Edit a.txt',
-      diffs: [{ path: 'a.txt', oldText: 'a\nb\nc\nOLD\nd\ne\nf', newText: 'a\nb\nc\nNEW\nd\ne\nf' }],
+      diffs: [{ path: 'a.txt', oldText: 'OLD', newText: 'NEW' }],
     })
   })
 
-  it('write OVERWRITE: execute attaches a contextual hunk; presentResult renders a diff card', async () => {
+  it('write OVERWRITE: execute attaches an applied hunk; presentResult renders a diff card', async () => {
     const { ctx, fs } = await setup()
     const session = { header: {} }
     fs.files.set('key:a.txt', withContext)
     await call(ctx, 'read', { file_path: 'a.txt' }, { session })
     const result = await call(ctx, 'write', { file_path: 'a.txt', content: 'a\nb\nc\nNEW\nd\ne\nf\n' }, { session })
     expect(result.isError).toBe(false)
-    expect(result.meta).toEqual({ diffs: [{ path: 'a.txt', oldText: 'a\nb\nc\nOLD\nd\ne\nf', newText: 'a\nb\nc\nNEW\nd\ne\nf' }] })
+    expect(result.meta).toEqual({ diffs: [{ path: 'a.txt', oldText: 'OLD', newText: 'NEW' }] })
     const view = ctx.tools.get('write')?.presentResult?.({ file_path: 'a.txt', content: 'x' }, result)
-    expect(view).toEqual({ card: 'diff', title: 'Write a.txt', diffs: [{ path: 'a.txt', oldText: 'a\nb\nc\nOLD\nd\ne\nf', newText: 'a\nb\nc\nNEW\nd\ne\nf' }] })
+    expect(view).toEqual({ card: 'diff', title: 'Write a.txt', diffs: [{ path: 'a.txt', oldText: 'OLD', newText: 'NEW' }] })
   })
 
   it('write CREATE: an empty applied-diff projection still falls back to the whole-file diff card', async () => {

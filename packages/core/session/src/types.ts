@@ -286,7 +286,7 @@ export interface SessionEventMap {
    * `meta` is rejected at the source, and the durable log reproduces the
    * identical card on replay. Absent
    * unless the tool attaches one (e.g. `dsh-tool-fs` carries its result-time
-   * contextual diff here).
+   * diff here).
    */
   'tool/result': {
     turn: number

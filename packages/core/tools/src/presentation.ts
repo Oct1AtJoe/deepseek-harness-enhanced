@@ -185,7 +185,7 @@ export interface DiffResultView {
   card: 'diff'
   /** Replacement title for the completed call. Omit to keep the pending-state title. */
   title?: string
-  /** The change to show, in file order — applied contextual hunks, or a whole-file diff when there is no before-image. */
+  /** The change to show, in file order — applied change hunks (changed lines only), or a whole-file diff when there is no before-image. */
   diffs: FileDiff[]
 }
 

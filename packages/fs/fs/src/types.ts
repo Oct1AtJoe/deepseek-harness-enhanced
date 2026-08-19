@@ -135,7 +135,7 @@ export interface FsWriteOutcome {
    * (a create) or the backend declined a contextual basis (for example, a
    * binary/non-UTF-8 prior file or either overwrite side reaching its exclusive limit).
    * LF-normalized storage text (the diff basis), never a diff — a consumer
-   * computes the result-time contextual diff from `before`/`after` when
+   * computes the result-time change diff from `before`/`after` when
    * `before` is present, else falls back to a whole-file diff.
    */
   before: string | null
@@ -159,8 +159,8 @@ export interface FsEditOutcome {
   version: FsVersion
   /**
    * The file's content BEFORE the edit. Raw storage text (LF-normalized by the
-   * backend), never a diff — a consumer computes the result-time contextual diff
-   * (the applied hunk with context) from `before`/`after`.
+   * backend), never a diff — a consumer computes the result-time diff (the
+   * applied hunk's change lines only) from `before`/`after`.
    */
   before: string
   /** The file's content AFTER the edit. */

@@ -1,18 +1,16 @@
 /**
- * Result-time contextual diff presentation for write and edit. Storage returns before/after
- * text; this model-facing layer derives one three-line-context card per applied hunk.
+ * Result-time diff presentation for write and edit. Storage returns before/after
+ * text; this model-facing layer derives one card per applied hunk, carrying the
+ * change's own lines only — never surrounding context.
  * @module @deepseek-ai/dsh-tool-fs/src/diff
  */
 
 import { structuredPatch } from 'diff'
 import type { FileDiff } from '@deepseek-ai/dsh-tools'
 
-/** Context lines shown on each side of an applied hunk. */
-export const DIFF_CONTEXT = 3
-
 /**
  * The `write`/`edit` tools' private `tool/result` `meta` payload: the applied
- * contextual-diff hunks. Attached opaquely (as `unknown`) on the tool result and
+ * diff hunks. Attached opaquely (as `unknown`) on the tool result and
  * persisted with the session log — it must be JSON-serializable (the session
  * validates this at `append`), so `presentResult` reproduces the diff card on
  * replay. The producing tool owns and narrows this opaque shape.
@@ -21,8 +19,11 @@ export type FsDiffMeta = { diffs: FileDiff[] }
 
 /**
  * Compute one {@link FileDiff} per hunk between `before` and `after`, each carrying the
- * applied change plus {@link DIFF_CONTEXT} context lines. Pure insertions use `oldText: null`,
- * patch-only no-newline markers are omitted, and scattered replacements remain separate hunks.
+ * change's own lines: every removed line on `oldText`, every added line on `newText`.
+ * Hunks never carry unchanged context lines, so a UI counts `+A -R` straight from the two
+ * texts; `str_replace_editor` reports the same no-context shape for its replace blocks.
+ * Pure insertions use `oldText: null`, patch-only no-newline markers are omitted, and
+ * scattered replacements remain separate hunks.
  *
  * @param path - the path stamped on every produced diff (the model-facing `file_path`; the
  *   bridge relativizes it).
@@ -31,7 +32,7 @@ export type FsDiffMeta = { diffs: FileDiff[] }
  * @returns one diff per applied hunk, in file order; empty when the texts are identical.
  */
 export function computeHunkDiffs(path: string, before: string, after: string): FileDiff[] {
-  const patch = structuredPatch('', '', before, after, undefined, undefined, { context: DIFF_CONTEXT })
+  const patch = structuredPatch('', '', before, after, undefined, undefined, { context: 0 })
   const diffs: FileDiff[] = []
   for (const hunk of patch.hunks) {
     const oldLines: string[] = []
@@ -44,10 +45,6 @@ export function computeHunkDiffs(path: string, before: string, after: string): F
       if (line.startsWith('-')) {
         oldLines.push(text)
       } else if (line.startsWith('+')) {
-        newLines.push(text)
-      } else {
-        // A context (unchanged) line appears on both sides.
-        oldLines.push(text)
         newLines.push(text)
       }
     }
