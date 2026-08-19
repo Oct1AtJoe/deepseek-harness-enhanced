@@ -483,7 +483,11 @@ fn notify_completed(app: &AppHandle, title: Option<&str>, body: &str, force: boo
                 toast = toast.on_activated(move |_action| {
                     log::info!("toast 点击激活（session={target}）");
                     show_main(&handle);
-                    open_session(&handle, &target);
+                    // 空 id（测试通知等无真实会话）只弹窗，不派发跳转——避免无意义的
+                    // unknown-session 失败；真实会话才触发 open_session。
+                    if !target.is_empty() {
+                        open_session(&handle, &target);
+                    }
                     Ok(())
                 });
             }
@@ -929,7 +933,9 @@ pub fn run() {
             .inner_size(1440.0, 900.0)
             .min_inner_size(900.0, 600.0)
             .center()
-            .drag_and_drop(false)
+            // 文件拖放必须开启：dsh-file-upload 插件（文件 chip 引用）依赖 DOM 的 drag 事件，
+            // 关闭时 WebView2 原生层拒绝拖入（光标显示 X，页面收不到任何 drag 事件）。
+            .drag_and_drop(true)
             .initialization_script(bridge_init_script(nport, &ntoken))
             .on_navigation(move |url| {
                 if is_app_origin(url, port) {
