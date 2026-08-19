@@ -1,0 +1,20 @@
+{
+  "name": "@deepseek-ai/dsh-desktop-pet",
+  "version": "0.1.0",
+  "type": "module",
+  "description": "DSH built-in desktop pet (whale-girl compatible)",
+  "main": "./src/client/index.mjs",
+  "exports": {
+    ".": "./src/client/index.mjs",
+    "./character": "./src/client/character.mjs",
+    "./logic": "./src/client/logic.mjs",
+    "./desktop": "./src/client/desktop.mjs",
+    "./assets/*": "./src/assets/*"
+  },
+  "dependencies": {
+    "@deepseek-ai/cordis": "workspace:^"
+  },
+  "scripts": {
+    "test": "node --test '../tests/*.test.mjs'"
+  }
+}
