@@ -657,10 +657,11 @@ fn show_error(app: &AppHandle, reason: &str) {
         .show();
 }
 
-/// 显示并聚焦主窗口。
+/// 显示并聚焦主窗口，并把窗口置顶到 Z 序最前。
 /// toast 点击回调运行在 winrt 事件线程，窗口操作必须经 run_on_main_thread
 /// 派发到主线程执行；show/unminimize/set_focus 的返回与窗口状态落日志，
-/// 供"点击通知不弹窗"场景定位。
+/// 供"点击通知不弹窗"场景定位。置顶瞬闪（TOPMOST → 取消）绕开后台进程
+/// SetForegroundWindow 被前台锁拒绝、窗口恢复后仍压在别的窗口后的问题。
 fn show_main(app: &AppHandle) {
     let handle = app.clone();
     let dispatched = app.run_on_main_thread(move || {
@@ -671,23 +672,28 @@ fn show_main(app: &AppHandle) {
         log::info!("show_main 前：visible={:?} focused={:?}", w.is_visible(), w.is_focused());
         let show = w.show();
         let unmin = w.unminimize();
+        // 置顶优先于 set_focus：SetWindowPos(HWND_TOPMOST) 直接跳 Z 序最前并争取焦点，
+        // 不依赖 Alt 键模拟在前台锁下的效果。
+        let topmost = w.set_always_on_top(true);
         let focus = w.set_focus();
         log::info!(
-            "show_main 结果：show={} unminimize={} set_focus={}",
+            "show_main 结果：show={} unminimize={} topmost={} set_focus={}",
             show.is_ok(),
             unmin.is_ok(),
+            topmost.is_ok(),
             focus.is_ok()
         );
     });
     if let Err(e) = dispatched {
         log::warn!("show_main 主线程派发失败：{e}");
     }
-    // 窗口刚从隐藏恢复时立即 set_focus 可能被前台锁拒绝（后台进程无输入链权限），
-    // 延时补一次——tao 的 force_window_active 带 Alt 键抢焦点 hack，第二次调用更稳。
+    // 延时收尾：窗口已显示并置顶抢到前台后取消 TOPMOST（恢复普通 Z 序语义，
+    // 窗口保持最前），再补一次 set_focus 兜底前台锁。
     let handle = app.clone();
     tauri::async_runtime::spawn(async move {
-        tokio::time::sleep(Duration::from_millis(250)).await;
+        tokio::time::sleep(Duration::from_millis(300)).await;
         if let Some(win) = handle.get_webview_window("main") {
+            let _ = win.set_always_on_top(false);
             let _ = win.set_focus();
         }
     });
@@ -933,9 +939,13 @@ pub fn run() {
             .inner_size(1440.0, 900.0)
             .min_inner_size(900.0, 600.0)
             .center()
-            // 文件拖放必须开启：dsh-file-upload 插件（文件 chip 引用）依赖 DOM 的 drag 事件，
-            // 关闭时 WebView2 原生层拒绝拖入（光标显示 X，页面收不到任何 drag 事件）。
-            .drag_and_drop(true)
+            // 文件拖放走 DOM HTML5 拖拽（dsh-file-upload 插件依赖 drag 事件）：
+            // 必须同时关掉 tao 窗口拖放目标 和 tauri 默认的 wry 拖放 handler——wry 一装
+            // handler 就会把 WebView2 AllowExternalDrop 置 false 并自行接管，DOM 收不到
+            // 任何 drag 事件（光标 X / 无反应）。两处都关后 AllowExternalDrop 保持默认
+            // TRUE，WebView2 原生处理拖放，页面才能收到 dragenter/dragover/drop。
+            .drag_and_drop(false)
+            .disable_drag_drop_handler()
             .initialization_script(bridge_init_script(nport, &ntoken))
             .on_navigation(move |url| {
                 if is_app_origin(url, port) {
