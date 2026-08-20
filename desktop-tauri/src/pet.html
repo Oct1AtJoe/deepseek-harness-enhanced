@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>桌面宠物</title>
+    <style>
+      * { margin: 0; padding: 0; box-sizing: border-box; }
+      html, body {
+        width: 100%; height: 100%;
+        overflow: hidden;
+        background: transparent;
+        user-select: none;
+      }
+      body { cursor: grab; }
+      body:active { cursor: grabbing; }
+      /* 填满窗口，精灵图锚定底部居中（地球不被裁） */
+      #pet {
+        position: absolute;
+        left: 0; top: 0;
+        width: 100%; height: 100%;
+        background-repeat: no-repeat;
+        background-position: center bottom;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="pet"></div>
+    <script src="./pet.js"></script>
+  </body>
+</html>

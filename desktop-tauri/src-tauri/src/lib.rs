@@ -273,6 +273,7 @@ fn spawn_child(command: &str, args: &[String]) -> Result<Child, SpawnError> {
 ///
 /// 默认 `node <bin.js>` 直跑（dsh.cmd shim 有引号转义坑）；`DSH_DESKTOP_BACKEND`
 /// 提供完整 argv 覆盖（dev 场景跑仓库源码 CLI）。
+/// 开发模式：自动检测源码仓库（E:\vibeCoding\deepseek-harness）优先使用。
 fn spawn_dsh(port: u16) -> Result<Child, SpawnError> {
     let port = port.to_string();
     if let Ok(override_cmd) = std::env::var("DSH_DESKTOP_BACKEND") {
@@ -285,6 +286,25 @@ fn spawn_dsh(port: u16) -> Result<Child, SpawnError> {
         args.push(port);
         log::info!("按 DSH_DESKTOP_BACKEND 启动：{command} {}", args.join(" "));
         return spawn_child(&command, &args);
+    }
+    // 开发模式：源码仓库 CLI 优先（config/schema 改动立即生效）
+    let checkout_cli = PathBuf::from(r"E:\vibeCoding\deepseek-harness\apps\cli\src\bin.ts");
+    if checkout_cli.is_file() {
+        let node = find_node().ok_or_else(|| {
+            SpawnError::NotFound("未找到 node.exe。".to_string())
+        })?;
+        let args = vec![
+            "--import".into(),
+            "tsx/esm".into(),
+            checkout_cli.to_string_lossy().into_owned(),
+            "web".into(),
+            "--host".into(),
+            "127.0.0.1".into(),
+            "--port".into(),
+            port,
+        ];
+        log::info!("dev 模式：源码仓库 CLI {}", args.join(" "));
+        return spawn_child(&node.to_string_lossy(), &args);
     }
     let node = find_node().ok_or_else(|| {
         SpawnError::NotFound("未找到 node.exe。请安装 Node.js 或设置 DSH_NODE 环境变量。".to_string())
@@ -1020,6 +1040,49 @@ pub fn run() {
                     notify_completed(&handle, None, "这是测试通知：任务完成链路验证", false, None);
                 });
             }
+            // 桌面宠物：透明置顶小窗，右下角悬浮，加载本地 pet.html。
+            // pet.js 轮询 DSH /pet/config（host-pet 插件）跟随设置（启用/角色/尺寸/透明度），
+            // 从 /pet/assets 加载角色素材；设置 tab 关闭时 pet.js 隐藏自身。
+            // 桌面宠物：透明置顶小窗。开关由 DSH settings 的 kanye-pet.desktopPetEnabled 控制。
+            let pet_enabled = matches!(
+                std::env::var("DSH_DESKTOP_PET_ENABLED").as_deref(),
+                Ok("1") | Ok("true") | Err(_) // 缺省启用（未设 env 时启用）
+            );
+            if pet_enabled {
+                log::info!("[pet] creating desktop pet window");
+                let (pet_w, pet_h) = (260.0f64, 260.0f64);
+                let pet_pos = app
+                    .primary_monitor()
+                    .ok()
+                    .flatten()
+                    .map(|monitor| {
+                        let size = monitor.size();
+                        let scale = monitor.scale_factor();
+                        let sx = size.width as f64 / scale;
+                        let sy = size.height as f64 / scale;
+                        // 右下角
+                        (sx - pet_w - 24.0, sy - pet_h - 24.0)
+                    })
+                    .unwrap_or((100.0, 100.0));
+                let _pet_window = tauri::WebviewWindowBuilder::new(
+                    app,
+                    "pet",
+                    tauri::WebviewUrl::App("pet.html".into()),
+                )
+                .title("桌宠 Kanye")
+                .inner_size(pet_w, pet_h)
+                .position(pet_pos.0, pet_pos.1)
+                .always_on_top(true)
+                .decorations(false)
+                .resizable(true)
+                .transparent(true)
+                .shadow(false)
+                .skip_taskbar(true)
+                .build()?;
+                log::info!("[pet] desktop pet window created successfully");
+            } else {
+                log::info!("[pet] desktop pet disabled");
+            }
             build_tray(app)?;
             ensure_shortcut();
             Ok(())
@@ -1076,6 +1139,7 @@ pub fn run() {
         });
 }
 
+#[tauri::command]
 #[cfg(test)]
 mod tests {
     use super::*;
