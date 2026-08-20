@@ -6,7 +6,10 @@ These rules apply to every task in this repository.
 
 ### 1. Requirement confirmation (mandatory, highest priority)
 
-If the user's requirement is unclear, or you do not understand it, confirm with the user promptly before acting. **Never guess.** One confirmation costs less than rework from a wrong guess.
+If the user's requirement is unclear, or you do not understand it, confirm with the user promptly before acting. **Never guess, never decide on your own.** One confirmation costs less than rework from a wrong guess.
+
+- **Complex or large requirements**: present a concrete plan first (approach and steps), then wait for the user to confirm it before executing. Do not start implementation before the user approves the plan.
+- **Small requirements**: no plan round-trip is needed. But when anything is unclear, ambiguous, or missing key context, still confirm with the user before acting — never guess, never decide on your own.
 
 Confirm when the requirement is vague, self-contradictory, or missing key context; when several plausible interpretations materially change the approach; or when the desired result is unknown. Procedure:
 
