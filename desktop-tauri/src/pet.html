@@ -12,7 +12,10 @@
         background: transparent;
         user-select: none;
       }
-      body { cursor: grab; }
+      body {
+        cursor: grab;
+        touch-action: none;       /* 防止触屏手势导致 pointer 事件异常 */
+      }
       body:active { cursor: grabbing; }
       /* 填满窗口，精灵图锚定底部居中（地球不被裁） */
       #pet {

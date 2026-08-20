@@ -330,6 +330,7 @@ Remove-Item "$env:LOCALAPPDATA\ai.deepseek.harness.desktop\EBWebView" -Recurse -
 | 10 | 修改后刷新页面没用 | WebView 缓存旧 JS，需清缓存或重启 exe |
 | 11 | 新 exe 启动后旧 DSH 还在 | Tauri 复用端口 3080 的已有服务，需先杀旧进程 |
 | 12 | 找不到 `__TAURI_INTERNALS__` | pet.html 必须通过 Tauri webview 加载（`tauri://` 协议），不能直接浏览器打开 |
+| 13 | 保存设置后值被回退成旧值 | 写入被拒：Windows 下 `settings.yaml` 被其他进程（第二个 DSH/编辑器/杀软）持句柄时 rename 报 EPERM。`dsh-atomic-write` 已有 unlink+rename 回退；若仍复现，重启 DSH 服务让新构建生效 |
 
 ---
 

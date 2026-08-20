@@ -3,5 +3,5 @@
   "identifier": "default",
   "description": "Capability for all windows (main + pet)",
   "windows": ["main", "pet"],
-  "permissions": ["core:default", "notification:default", "core:window:default", "core:window:allow-start-dragging", "core:window:allow-set-size"]
+  "permissions": ["core:default", "notification:default", "core:window:default", "core:window:allow-set-size", "core:window:allow-set-position", "core:window:allow-outer-position"]
 }

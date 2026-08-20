@@ -11,7 +11,7 @@
  */
 
 import { randomBytes } from 'node:crypto'
-import { mkdir, rename, rm, writeFile } from 'node:fs/promises'
+import { lstat, mkdir, rename, rm, writeFile } from 'node:fs/promises'
 import { dirname } from 'node:path'
 
 /**
@@ -32,6 +32,9 @@ export interface WriteFileAtomicOptions {
   dirMode?: number
 }
 
+/** Rename codes meaning the target is held open or otherwise blocks the replace. */
+const RENAME_BLOCKED = new Set<string | undefined>(['EPERM', 'EBUSY', 'EACCES'])
+
 /**
  * Replace `filename` with `content` in one atomic step, creating parent
  * directories. The content is first written to a random-suffix sibling opened
@@ -42,6 +45,15 @@ export interface WriteFileAtomicOptions {
  * through to its referent, and the same-directory sibling keeps the rename on
  * one filesystem. On any failure the temp file is removed and the failure
  * rethrown. Crash durability (fsync) is out of scope.
+ *
+ * When the rename is blocked (`EPERM`/`EBUSY`/`EACCES` — commonly Windows,
+ * where another process holding the target open without delete sharing, such
+ * as a second harness instance's watcher, an editor, or an AV scanner, fails
+ * the rename even though deleting the target succeeds), the target is
+ * unlinked and the rename retried once, so a held-open target cannot silently
+ * lose a settings write. The target is briefly absent: a reader can observe a
+ * miss instead of the old content during that swap. A directory target is
+ * rethrown untouched.
  * @param filename - final path receiving the content.
  * @param content - complete next file content.
  * @param options - permission bits for the replacement inode.
@@ -56,7 +68,15 @@ export async function writeFileAtomic(filename: string, content: string, options
   const temp = `${filename}.${randomBytes(6).toString('hex')}.tmp`
   try {
     await writeFile(temp, content, { mode: options.mode, flag: 'wx' })
-    await rename(temp, filename)
+    try {
+      await rename(temp, filename)
+    } catch (error) {
+      const code = (error as NodeJS.ErrnoException | null)?.code
+      if (!RENAME_BLOCKED.has(code)) throw error
+      if ((await lstat(filename)).isDirectory()) throw error
+      await rm(filename, { force: true })
+      await rename(temp, filename)
+    }
   } catch (error) {
     await rm(temp, { force: true })
     throw error

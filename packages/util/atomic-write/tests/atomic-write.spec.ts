@@ -1,8 +1,26 @@
-import { lstat, mkdir, mkdtemp, readFile, readdir, stat, symlink, writeFile } from 'node:fs/promises'
+import { lstat, mkdir, mkdtemp, readFile, readdir, rename, stat, symlink, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { withFileLock, writeFileAtomic } from '../src/index.ts'
+
+// The blocked-rename fallback needs the rename call to fail on demand; the
+// module namespace is not configurable under ESM, so the whole builtin is
+// wrapped and rename gets a mock that delegates to the real implementation.
+vi.mock('node:fs/promises', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('node:fs/promises')>()
+  return { ...actual, rename: vi.fn(actual.rename) }
+})
+
+const renameMock = rename as unknown as ReturnType<typeof vi.fn>
+
+function blockedRename(code: string, message: string): Error {
+  return Object.assign(new Error(message), { code })
+}
+
+beforeEach(() => {
+  renameMock.mockClear()
+})
 
 async function scratch(): Promise<string> {
   return mkdtemp(join(tmpdir(), 'dsh-atomic-write-'))
@@ -44,6 +62,46 @@ describe('writeFileAtomic', () => {
     await mkdir(target)
     await expect(writeFileAtomic(target, 'content', { mode: 0o600 })).rejects.toThrow()
     expect((await readdir(dir)).filter(entry => entry.includes('.tmp'))).toEqual([])
+  })
+
+  it('unlinks a held-open target and retries the rename once', async () => {
+    const dir = await scratch()
+    const target = join(dir, 'doc.yaml')
+    await writeFile(target, 'old')
+    renameMock.mockRejectedValueOnce(blockedRename('EPERM', 'EPERM: operation not permitted'))
+    await writeFileAtomic(target, 'new', { mode: 0o600 })
+    expect(renameMock).toHaveBeenCalledTimes(2)
+    expect(await readFile(target, 'utf8')).toBe('new')
+    expect((await readdir(dir)).filter(entry => entry.includes('.tmp'))).toEqual([])
+  })
+
+  it('rethrows when the retry rename is blocked too and removes the temp', async () => {
+    const dir = await scratch()
+    const target = join(dir, 'doc.yaml')
+    await writeFile(target, 'old')
+    renameMock.mockRejectedValueOnce(blockedRename('EPERM', 'EPERM: first rename blocked'))
+    renameMock.mockRejectedValueOnce(blockedRename('EPERM', 'EPERM: retry blocked'))
+    await expect(writeFileAtomic(target, 'content', { mode: 0o600 })).rejects.toMatchObject({ code: 'EPERM' })
+    expect((await readdir(dir)).filter(entry => entry.includes('.tmp'))).toEqual([])
+  })
+
+  it('never replaces a directory target through the blocked-rename fallback', async () => {
+    const dir = await scratch()
+    const target = join(dir, 'occupied')
+    await mkdir(target)
+    renameMock.mockRejectedValueOnce(blockedRename('EPERM', 'EPERM: operation not permitted'))
+    await expect(writeFileAtomic(target, 'content', { mode: 0o600 })).rejects.toMatchObject({ code: 'EPERM' })
+    expect((await stat(target)).isDirectory()).toBe(true)
+  })
+
+  it('rethrows a non-blocked rename failure without the fallback', async () => {
+    const dir = await scratch()
+    const target = join(dir, 'doc.yaml')
+    await writeFile(target, 'old')
+    renameMock.mockRejectedValueOnce(blockedRename('EISDIR', 'EISDIR: illegal operation on a directory'))
+    await expect(writeFileAtomic(target, 'content', { mode: 0o600 })).rejects.toMatchObject({ code: 'EISDIR' })
+    expect(renameMock).toHaveBeenCalledTimes(1)
+    expect(await readFile(target, 'utf8')).toBe('old')
   })
 })
 

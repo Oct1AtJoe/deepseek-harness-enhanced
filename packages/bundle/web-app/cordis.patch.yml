@@ -119,10 +119,11 @@
         host: !!js ctx.webStartup.host ?? '127.0.0.1'
         port: !!js ctx.webStartup.port ?? 3080
 
-    # Built-in desktop pet (kanye-pet, forked from whale-girl): Node half serves
-    # state/assets/config/SSE; client half renders the pet (dsh.client row below).
+    # Built-in desktop pet (kanye-pet): Node half serves
+    # state/assets/config/SSE for the Tauri desktop pet window.
     - id: kanye-pet
       name: kanye-pet
+
 
     # Web glue owned by this bundle: resolves the built frontend dist (an
     # assembly fact of dsh-web-app, never user config), mounts the

@@ -17,30 +17,93 @@ let lastFrameAt = 0;
 let currentConfig = { enabled: true, size: 200, character: 'kanye', opacity: 1 };
 let dragging = false;
 
-// ---- Drag handler ----
-// Tauri 2 IPC: __TAURI_INTERNALS__.invoke('plugin:window|start_dragging')
-// 权限: core:window:allow-start-dragging（capabilities/default.json）
-// 拖拽期间设 dragging=true 暂停帧动画，避免视觉抖动。
-async function startDrag() {
+// ---- Drag handler (manual set_position, no Windows Snap) ----
+// 不用 Tauri start_dragging（触 Windows Aero Snap），改用 pointer events +
+// set_position 手动移窗。程序化 SetWindowPos 不触发 Snap。
+// 权限: core:window:allow-set-position / allow-outer-position
+let winX = 0, winY = 0;         // 当前窗口位置（逻辑像素，本地追踪）
+let dragState = null;            // { offsetX, offsetY } 拖拽中鼠标相对窗口偏移
+let dragRafId = null;            // requestAnimationFrame id（节流 set_position）
+let pendingPos = null;           // { x, y } 等待 flush 的位置
+
+// 启动时同步窗口位置（窗口状态插件可能已恢复上次位置）
+async function queryPosition() {
   const invoke = window.__TAURI_INTERNALS__?.invoke;
   if (typeof invoke !== 'function') return;
+  try {
+    const pos = await invoke('plugin:window|outer_position');
+    const p = pos?.value ?? pos ?? {};
+    winX = Number(p.x) ?? 0;
+    winY = Number(p.y) ?? 0;
+  } catch (e) {
+    console.warn('[pet] query outer_position failed:', e);
+  }
+}
+
+// RAF 节流：只发最后一帧位置，避免 IPC 风暴
+function scheduleSetPosition(x, y) {
+  pendingPos = { x: Math.round(x), y: Math.round(y) };
+  if (!dragRafId) {
+    dragRafId = requestAnimationFrame(() => {
+      dragRafId = null;
+      if (!pendingPos) return;
+      const invoke = window.__TAURI_INTERNALS__?.invoke;
+      if (typeof invoke !== 'function') return;
+      invoke('plugin:window|set_position', {
+        value: { Logical: { x: pendingPos.x, y: pendingPos.y } },
+      }).catch(() => {});
+      pendingPos = null;
+    });
+  }
+}
+
+function handlePointerDown(e) {
+  if (e.button !== 0) return;
+  e.preventDefault();
+  // 记录鼠标相对窗口偏移（screenX/Y 逻辑像素）
+  dragState = {
+    offsetX: e.screenX - winX,
+    offsetY: e.screenY - winY,
+  };
   dragging = true;
   pet.style.cursor = 'grabbing';
-  try {
-    await invoke('plugin:window|start_dragging');
-  } catch (e) {
-    console.warn('[pet] start_dragging failed:', e);
+  pet.setPointerCapture(e.pointerId);
+}
+
+function handlePointerMove(e) {
+  if (!dragState) return;
+  const newX = e.screenX - dragState.offsetX;
+  const newY = e.screenY - dragState.offsetY;
+  winX = newX;
+  winY = newY;
+  scheduleSetPosition(newX, newY);
+}
+
+function handlePointerUp(e) {
+  if (!dragState) return;
+  // 刷掉最后挂起的位置
+  if (dragRafId) {
+    cancelAnimationFrame(dragRafId);
+    dragRafId = null;
   }
+  const invoke = window.__TAURI_INTERNALS__?.invoke;
+  if (typeof invoke === 'function' && pendingPos) {
+    invoke('plugin:window|set_position', {
+      value: { Logical: { x: pendingPos.x, y: pendingPos.y } },
+    }).catch(() => {});
+    pendingPos = null;
+  }
+  dragState = null;
   dragging = false;
   pet.style.cursor = 'grab';
 }
 
 function setupDrag() {
-  pet.addEventListener('pointerdown', (e) => {
-    if (e.button !== 0) return;
-    e.preventDefault();
-    void startDrag();
-  });
+  // pointerdown → capture → pointermove/up（setPointerCapture 保证移出元素仍收事件）
+  pet.addEventListener('pointerdown', handlePointerDown);
+  pet.addEventListener('pointermove', handlePointerMove);
+  pet.addEventListener('pointerup', handlePointerUp);
+  pet.addEventListener('pointercancel', handlePointerUp);
 }
 
 // ---- Config ----
@@ -169,6 +232,7 @@ async function pollConfig() {
 
 // ---- Init ----
 setupDrag();
+void queryPosition();
 void loadManifest();
 void pollConfig();
 setInterval(() => void pollConfig(), POLL_MS);
