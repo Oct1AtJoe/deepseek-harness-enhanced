@@ -571,18 +571,38 @@ fn bridge_init_script(port: u16, token: &str) -> String {
     this.options = options || {};
     this.onclick = null;
     var bridge = window.__dshNotifyBridge;
-    if (bridge && bridge.fire) {
-      try {
-        bridge.fire({
-          type: 'dsh-notification',
-          title: title,
-          body: (options && options.body) || '',
-          tag: (options && options.tag) || '',
-          sessionId: (options && options.sessionId) || '',
-          requireInteraction: !!(options && options.requireInteraction),
-          force: true
-        });
-      } catch(e){}
+    if (!bridge || !bridge.fire) return;
+    var payload = {
+      type: 'dsh-notification',
+      title: title,
+      body: (options && options.body) || '',
+      tag: (options && options.tag) || '',
+      sessionId: (options && options.sessionId) || '',
+      requireInteraction: !!(options && options.requireInteraction),
+      force: true
+    };
+    // 审批/提问类（pending tag）永远走 Windows 通知；
+    // 完成类通知在桌宠启用时直接抑制（由 kanye-pet 的 turn 检测驱动气泡），不弹 Windows Toast。
+    var tag = payload.tag || '';
+    if (tag.indexOf('-pending-') >= 0) {
+      bridge.fire(payload);
+      return;
+    }
+    var fire = function() { bridge.fire(payload); };
+    try {
+      fetch('http://127.0.0.1:3080/kanye-pet/config', { cache: 'no-store' })
+        .then(function(r) { return r.json(); })
+        .then(function(b) {
+          var cfg = (b && b.config) || b || {};
+          // desktopPetEnabled 缺省视为启用（与 config.mjs default(true) 一致）
+          if (cfg.desktopPetEnabled === false) {
+            fire(); // pet 关闭：走 Windows 通知
+          }
+          // pet 启用：直接抑制，由 kanye-pet turn 检测驱动气泡
+        })
+        .catch(function() { fire(); });  // 查询失败兜底走 Windows
+    } catch (e) {
+      fire();
     }
   }
   ShimNotification.permission = 'granted';
@@ -594,7 +614,9 @@ fn bridge_init_script(port: u16, token: &str) -> String {
         .replace("__TOKEN__", token)
 }
 
-/// 生成页面侧任务完成监听脚本：轮询"忙碌→空闲"翻转，翻转即经已注入的 __dshNotifyBridge 上报。
+/// 生成页面侧任务完成监听脚本：轮询"忙碌→空闲"翻转，翻转即弹桌面通知。
+/// 走 `new Notification` 而非直接 `bridge.fire()`，让 ShimNotification 统一决策
+/// （桌宠启用时抑制 Windows 通知、由 pet 气泡接管）。
 fn task_notifier_script() -> String {
     let js = r#"
 (function(){
@@ -610,8 +632,8 @@ fn task_notifier_script() -> String {
   }
   setInterval(function(){
     var b = isBusy();
-    if (wasBusy && !b && window.__dshNotifyBridge) {
-      window.__dshNotifyBridge.fire({type: 'task-complete', body: '任务已完成，回来看看吧'});
+    if (wasBusy && !b) {
+      try { new Notification('DeepSeek Harness', { body: '任务已完成，回来看看吧' }); } catch(e){}
     }
     wasBusy = b;
   }, 1000);

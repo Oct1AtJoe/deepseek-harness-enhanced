@@ -280,8 +280,24 @@ async function pollConfig() {
     const body = await res.json();
     const config = body?.config ?? body;
     applyConfig(config);
+    // manifest 还没加载或加载失败时重试（DSH 刚启动时可能 assets 端点未就绪）
+    if (!manifestReady) void loadManifest();
     if (manifestReady) resolveCharacterFromConfig(config);
   } catch {}
+}
+
+// ---- State polling (notification) ----
+async function pollState() {
+  try {
+    const res = await fetch(STATE_URL);
+    if (!res.ok) { console.log('[pet] pollState: HTTP', res.status); return; }
+    const body = await res.json();
+    const n = body?.notification ?? null;
+    console.log('[pet] pollState: notification=', JSON.stringify(n));
+    showBubble(n);
+  } catch (e) {
+    console.log('[pet] pollState error:', e);
+  }
 }
 
 // ---- Init ----
@@ -289,5 +305,7 @@ setupDrag();
 void queryPosition();
 void loadManifest();
 void pollConfig();
+void pollState();
 setInterval(() => void pollConfig(), POLL_MS);
+setInterval(() => void pollState(), POLL_MS);
 setInterval(tick, 200);
