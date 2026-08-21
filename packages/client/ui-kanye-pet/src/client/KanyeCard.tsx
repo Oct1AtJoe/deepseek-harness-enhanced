@@ -103,7 +103,7 @@ export function KanyeCard(props: KanyeCardProps): ReactNode {
         value={state.size}
         disabled={disabled}
         onEdit={(text) => { props.edit('size', text) }}
-        onReset={() => { props.edit('size', '300') }}
+        onReset={() => { props.edit('size', '150') }}
         t={t}
       />
       <NumberField

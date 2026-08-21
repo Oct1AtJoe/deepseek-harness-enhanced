@@ -105,7 +105,7 @@ export class KanyeCardController {
     const trimmed = staged.text.trim()
     if (trimmed === '' || !Number.isFinite(Number(trimmed))) return { text: staged.text, invalid: trimmed !== '' }
     const num = Number(trimmed)
-    if (field === 'size' && (num < 100 || num > 600)) return { text: staged.text, invalid: true }
+    if (field === 'size' && (num < 100 || num > 300)) return { text: staged.text, invalid: true }
     if (field === 'opacity' && (num < 0 || num > 1)) return { text: staged.text, invalid: true }
     return { text: staged.text, invalid: false }
   }
