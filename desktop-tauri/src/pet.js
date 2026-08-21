@@ -166,15 +166,17 @@ async function applyConfig(config) {
   const show = config.desktopPetEnabled !== false;
   document.body.style.opacity = show ? String(config.opacity ?? 1) : '0';
   document.body.style.pointerEvents = show ? 'auto' : 'none';
-  // 尺寸变更：resize Tauri 窗口（上限 600）
+  // 尺寸变更：按素材比例 122×207 设窗口，不拉伸
   const newSize = Math.min(600, Number(config.size));
   if (Number.isFinite(newSize) && newSize > 0) {
-    const winSize = Math.round(newSize * 1.02);
+    const FRAME_W = 122, FRAME_H = 207; // 裁剪后每帧尺寸
+    const winW = Math.round(newSize);
+    const winH = Math.round(newSize * FRAME_H / FRAME_W);
     const invoke = window.__TAURI_INTERNALS__?.invoke;
-    if (invoke) {
+    if (invoke && winW > 0 && winH > 0) {
       try {
         await invoke('plugin:window|set_size', {
-          value: { Logical: { width: winSize, height: winSize } },
+          value: { Logical: { width: winW, height: winH } },
         });
       } catch (e) {
         console.warn('[pet] resize failed:', e);
@@ -227,7 +229,7 @@ function showState(name) {
   if (!set) return;
   void loadSheet(set.sheet);
   pet.style.backgroundImage = `url("${ASSETS}/characters/${characterId}/${set.sheet}")`;
-  pet.style.backgroundSize = `${set.frames * 100}% 100%`;
+  pet.style.backgroundSize = 'auto 100%';
   applyFrame(set.frames);
 }
 

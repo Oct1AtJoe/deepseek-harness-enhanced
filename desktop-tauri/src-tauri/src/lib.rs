@@ -1066,7 +1066,7 @@ pub fn run() {
             );
             if pet_enabled {
                 log::info!("[pet] creating desktop pet window");
-                let (pet_w, pet_h) = (260.0f64, 260.0f64);
+                let (pet_w, pet_h) = (140.0f64, 238.0f64);
                 let pet_pos = app
                     .primary_monitor()
                     .ok()
