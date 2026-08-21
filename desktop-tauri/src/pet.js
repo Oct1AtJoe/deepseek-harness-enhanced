@@ -167,7 +167,7 @@ async function applyConfig(config) {
   document.body.style.opacity = show ? String(config.opacity ?? 1) : '0';
   document.body.style.pointerEvents = show ? 'auto' : 'none';
   // 尺寸变更：按素材比例 122×207 设窗口，不拉伸
-  const newSize = Math.min(600, Number(config.size));
+  const newSize = Math.min(300, Number(config.size));
   if (Number.isFinite(newSize) && newSize > 0) {
     const FRAME_W = 122, FRAME_H = 207; // 裁剪后每帧尺寸
     const winW = Math.round(newSize);
