@@ -2,47 +2,35 @@
 
 ## Global agent rules
 
-These rules apply to every task in this repository.
+These apply to every task in this repo.
 
-### 1. Requirement confirmation (mandatory, highest priority)
+### 1. Requirement confirmation
 
-If the user's requirement is unclear, or you do not understand it, confirm with the user promptly before acting. **Never guess, never decide on your own.** One confirmation costs less than rework from a wrong guess.
+If unclear, **confirm with user before acting**. One confirmation costs less than rework from a wrong guess.
 
-- **Complex or large requirements**: present a concrete plan first (approach and steps), then wait for the user to confirm it before executing. Do not start implementation before the user approves the plan.
-- **Small requirements**: no plan round-trip is needed. But when anything is unclear, ambiguous, or missing key context, still confirm with the user before acting — never guess, never decide on your own.
+- **Complex/large**: present a concrete plan first (approach + steps); wait for approval before executing.
+- **Small**: confirm when unclear, ambiguous, or missing key context — never guess, never decide on your own.
 
-Confirm when the requirement is vague, self-contradictory, or missing key context; when several plausible interpretations materially change the approach; or when the desired result is unknown. Procedure:
-
-1. Restate your understanding in one sentence.
-2. List the assumptions and open points that affect the implementation.
-3. Offer two or three options or targeted questions.
-4. Wait for confirmation before implementing.
-
-Exception: facts directly verifiable from the repository (interface signatures, existing implementations) are not open points; verify them yourself and declare any remaining assumption in your reply.
+Procedure: restate understanding → list assumptions/open points → offer 2-3 options → wait for confirmation. Exception: facts directly verifiable from the repo are not open points.
 
 ### 2. Coding standards
+- Minimal: prefer deletion over addition; no unrequested dependencies, abstractions, or boilerplate.
+- Reuse first: existing code → standard library → installed deps → new deps.
+- Follow repo conventions: directory structure, naming, strict typing, error handling, lint, formatting.
 
-- Minimal: prefer deletion over addition and boring over clever; add no unrequested dependencies, abstractions, or boilerplate.
-- Reuse first: existing code before the standard library, the standard library before installed dependencies, installed dependencies before new dependencies.
-- Follow the repository's existing conventions: directory structure, naming, strict typing, error handling, lint, and formatting.
-
-### 3. Testing and quality
-
-- Every behavior change carries tests; run the relevant tests and the build before committing.
-- Run lint or fix only on files this change touches; never fix the whole repository indiscriminately.
+### 3. Testing
+- Every behavior change carries tests; run relevant tests and build before committing.
+- Run lint/fix only on files this change touches.
 
 ### 4. Commits and code review
-
-- Small commits, one topic each; commit messages follow Conventional Commits and state the motivation.
-- PRs stay independent and traceable with no unrelated changes mixed in.
+- Small commits, one topic each; Conventional Commits format, state motivation.
+- PRs stay independent and traceable; no unrelated changes.
 
 ### 5. Documentation
-
-- Behavior or interface changes update the affected README, JSDoc, and related documentation in the same change.
+- Behavior/interface changes update the affected README, JSDoc, and related documentation in the same change.
 
 ### 6. Security
-
-- Never commit secrets, tokens, or .env files. Confirm with the user before destructive operations (delete, overwrite, push).
+- Never commit secrets, tokens, or .env files. Confirm before destructive operations (delete, overwrite, push).
 
 DeepSeek Harness is a plugin-based agent harness on vendored Cordis: **everything is a plugin**. Read [docs/architecture.md](docs/architecture.md) before changing `packages/`; follow [docs/AGENTS.md](docs/AGENTS.md) for documentation.
 
@@ -81,12 +69,13 @@ packages/    @deepseek-ai/dsh-<pkg> workspaces at packages/<group>/<pkg>/
   session/     durable session data: persistence, projection, titles, telemetry
   identity/    anonymous identity
   settings/    user-settings capability + file provider
-  credentials/ credential-reference capability + env/.env provider
+  credentials/ credential/authorization capabilities + env/.env provider
   acp/         automation-only Agent Client Protocol server
   interaction/ approval/interaction capabilities, permission, commands, ask-user
   boot/        shared app-bin glue
   sdk/         JSON-RPC protocol, server, and TypeScript client
   examples/    demo bundles (agent-spine + CLI/ACP/JSON-RPC bins)
+  experimental/ private prototypes excluded from official releases
   support/     dev/test infrastructure
   util/        zero-dependency utilities
 python/      Python SDK and bundled runtime (see python/README.md)

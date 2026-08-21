@@ -17,10 +17,10 @@ describe('dsh-notification invariant companion', () => {
     await fiber
     const registry = ctx.get('invariants') as InvariantRegistry
     // A second registration of the same package proves the first is live.
-    expect(() => registry.register('dsh-notification', () => {})).toThrow(/already registered/)
+    expect(() => registry.register('@deepseek-ai/dsh-notification-custom', () => {})).toThrow(/already registered/)
     await fiber.dispose()
     // After withdrawal the package name is free again.
-    expect(() => registry.register('dsh-notification', () => {})).not.toThrow()
+    expect(() => registry.register('@deepseek-ai/dsh-notification-custom', () => {})).not.toThrow()
     await registryFiber.dispose()
   })
 })

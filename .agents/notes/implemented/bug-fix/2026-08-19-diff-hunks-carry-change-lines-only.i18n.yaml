@@ -3,4 +3,4 @@
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/bug-fix/2026-08-19-diff-hunks-carry-change-lines-only.md
 2026-08-19-diff-hunks-carry-change-lines-only.md: 99de97e50999c53a7a48b3ba9fd5367a7c14d02f
-2026-08-19-diff-hunks-carry-change-lines-only.zh.md: 359e5412da9c5e63e01716747357201a9fe3ed1b
+2026-08-19-diff-hunks-carry-change-lines-only.zh.md: 4a85eae3ed18b021e0532e66c689213aeca35f15

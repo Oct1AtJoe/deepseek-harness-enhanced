@@ -5,12 +5,18 @@
 import type { NotificationRule } from '../contract.ts'
 import type { NotificationKey } from './locales.ts'
 
-/** Mint a fresh rule id (browser crypto). */
+/**
+ * Mint a fresh rule id (browser crypto).
+ * @returns a fresh unique rule id.
+ */
 export function mintRuleId(): string {
   return crypto.randomUUID()
 }
 
-/** A new empty include rule ready for editing. */
+/**
+ * A new empty include rule ready for editing.
+ * @returns a fresh empty include rule.
+ */
 export function emptyRule(): NotificationRule {
   return { id: mintRuleId(), enabled: true, mode: 'include', pattern: '', isRegex: false, caseSensitive: false }
 }
@@ -34,7 +40,11 @@ export function ruleError(rule: NotificationRule): NotificationKey | undefined {
   return undefined
 }
 
-/** First invalid rule in a draft list, or undefined when every rule is valid. */
+/**
+ * First invalid rule in a draft list, or undefined when every rule is valid.
+ * @param rules - the draft rule list.
+ * @returns the first invalid rule's index and reason key, or undefined when every rule is valid.
+ */
 export function firstRuleError(rules: readonly NotificationRule[]): { index: number; key: NotificationKey } | undefined {
   for (let index = 0; index < rules.length; index++) {
     const key = ruleError(rules[index] as NotificationRule)
@@ -54,7 +64,12 @@ export function patchRule(rules: readonly NotificationRule[], id: string, patch:
   return rules.map(rule => (rule.id === id ? { ...rule, ...patch } : rule))
 }
 
-/** Remove one rule by id, returning a new array. */
+/**
+ * Remove one rule by id, returning a new array.
+ * @param rules - the draft rule list.
+ * @param id - the rule to remove.
+ * @returns the list without that rule.
+ */
 export function removeRule(rules: readonly NotificationRule[], id: string): NotificationRule[] {
   return rules.filter(rule => rule.id !== id)
 }

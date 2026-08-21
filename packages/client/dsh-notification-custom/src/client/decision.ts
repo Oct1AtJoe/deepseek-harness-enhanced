@@ -5,7 +5,11 @@
  */
 import type { NotificationReason, NotificationRule, NotificationSettings, PendingKind } from '../contract.ts'
 
-/** Map a raw projection reason to a notifiable reason, or undefined for unknown kinds. */
+/**
+ * Map a raw projection reason to a notifiable reason.
+ * @param reason - the raw projection reason kind string.
+ * @returns the mapped NotificationReason, or undefined for unrecognized kinds.
+ */
 export function asReason(reason: string | undefined): NotificationReason | undefined {
   switch (reason) {
     case 'completed':
@@ -19,7 +23,12 @@ export function asReason(reason: string | undefined): NotificationReason | undef
   }
 }
 
-/** Whether the configured per-outcome switch is on for a reason. */
+/**
+ * Whether the configured per-outcome switch is on for a reason.
+ * @param settings - the live client settings.
+ * @param reason - the notifiable reason to check.
+ * @returns whether that outcome's toggle is on.
+ */
 export function reasonEnabled(settings: NotificationSettings, reason: NotificationReason): boolean {
   switch (reason) {
     case 'completed': return settings.notifyCompleted
@@ -30,7 +39,12 @@ export function reasonEnabled(settings: NotificationSettings, reason: Notificati
   }
 }
 
-/** Whether the configured switch is on for a pending interaction. */
+/**
+ * Whether the configured switch is on for a pending interaction.
+ * @param settings - the live client settings.
+ * @param kind - the pending interaction kind to check.
+ * @returns whether that kind's toggle is on.
+ */
 export function pendingReasonEnabled(settings: NotificationSettings, kind: PendingKind): boolean {
   switch (kind) {
     case 'approval': return settings.notifyApproval
@@ -39,7 +53,13 @@ export function pendingReasonEnabled(settings: NotificationSettings, kind: Pendi
   }
 }
 
-/** The text rules match against: the session title, the reply text, and the tool names. */
+/**
+ * The text rules match against: the session title, the reply text, and the tool names.
+ * @param title - the session's durable title (absent until the host projects one).
+ * @param body - the turn's reply text.
+ * @param tools - the turn's tool names.
+ * @returns the parts joined on newlines.
+ */
 export function ruleSubject(title: string | undefined, body: string, tools: readonly string[]): string {
   const parts: string[] = []
   if (title !== undefined && title.trim() !== '') parts.push(title)
@@ -48,7 +68,12 @@ export function ruleSubject(title: string | undefined, body: string, tools: read
   return parts.join('\n')
 }
 
-/** Whether one rule matches its subject. */
+/**
+ * Whether one rule matches its subject.
+ * @param rule - the rule to evaluate.
+ * @param subject - the rule subject text.
+ * @returns whether the rule matches.
+ */
 export function ruleMatches(rule: NotificationRule, subject: string): boolean {
   if (rule.isRegex) {
     const flags = rule.caseSensitive ? '' : 'i'
@@ -63,6 +88,9 @@ export function ruleMatches(rule: NotificationRule, subject: string): boolean {
  * Evaluate the include/exclude rules against one subject. Any matching exclude
  * rule suppresses; if at least one include rule exists, at least one must
  * match; otherwise the subject is allowed.
+ * @param settings - the live client settings.
+ * @param subject - the rule subject text.
+ * @returns whether the subject passes the rules.
  */
 export function rulesAllow(settings: NotificationSettings, subject: string): boolean {
   const active = settings.rules.filter(rule => rule.enabled)
@@ -73,7 +101,13 @@ export function rulesAllow(settings: NotificationSettings, subject: string): boo
   return true
 }
 
-/** The whole decision for one completed session, free of any browser reads. */
+/**
+ * The whole decision for one completed session, free of any browser reads.
+ * @param settings - the live client settings.
+ * @param reason - the notifiable reason of the completed turn.
+ * @param subject - the rule subject text.
+ * @returns whether a notification should surface.
+ */
 export function shouldNotify(
   settings: NotificationSettings,
   reason: NotificationReason,

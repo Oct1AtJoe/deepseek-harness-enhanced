@@ -1,6 +1,6 @@
 {
-  "name": "kanye-pet",
-  "version": "0.1.0",
+  "name": "@deepseek-ai/dsh-kanye-pet",
+  "version": "0.1.1-rc.1",
   "type": "module",
   "description": "DSH 内置桌面宠物（kanye-pet，源自 whale-girl）",
   "main": "lib/index.mjs",

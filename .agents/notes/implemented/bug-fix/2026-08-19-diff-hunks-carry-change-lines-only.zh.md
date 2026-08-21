@@ -38,4 +38,4 @@ diff 卡不再提供用于在文件内定位改动的周围上下文。卡片是
 
 ## 相关
 
-- [Web diff 卡片](../feature/2026-07-30-web-diff-card.md) —— 把应用的 hunk 送到浏览器的功能；本修复纠正该 result view 携带的 hunk。
+- [Web diff 卡片](../feature/2026-07-30-web-diff-card.zh.md) —— 把应用的 hunk 送到浏览器的功能；本修复纠正该 result view 携带的 hunk。

@@ -69,7 +69,12 @@ export function notificationFor(
   }
 }
 
-/** Fold one session's pending-interaction state and detect a fresh wait. */
+/**
+ * Fold one session's pending-interaction state and detect a fresh wait.
+ * @param prev - the previously observed pending kind (undefined = first observation).
+ * @param kind - the current pending kind.
+ * @returns the next observed kind and whether a fresh wait began.
+ */
 export function pendingAdvance(
   prev: { kind: PendingKind | undefined } | undefined,
   kind: PendingKind | undefined,
@@ -85,7 +90,16 @@ export interface PendingNotificationPlan {
   readonly tag: string
 }
 
-/** Decide one pending interaction without reading browser state. */
+/**
+ * Decide one pending interaction without reading browser state.
+ * @param sessionId - the waiting session.
+ * @param origin - the session's durable origin (subagents are skipped).
+ * @param title - the session's durable title.
+ * @param kind - the pending interaction kind.
+ * @param sequence - the session's pending-interaction sequence number.
+ * @param settings - the live client settings.
+ * @returns the plan, or null when this interaction must not notify.
+ */
 export function pendingNotificationFor(
   sessionId: string,
   origin: string | undefined,

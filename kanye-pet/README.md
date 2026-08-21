@@ -1,5 +1,7 @@
 # Kanye West Pet 🐋
 
+English | [中文](README.zh.md)
+
 A Kanye West character for the [whale-girl](https://github.com/vlln/whale-girl) desktop pet plugin.
 
 ## Install

@@ -6,7 +6,10 @@
 import { createSnapshotStore, type SnapshotStore } from '@deepseek-ai/dsh-client-runtime/client'
 import type { NotificationSettings } from '../contract.ts'
 
-/** The out-of-the-box preferences. */
+/**
+ * The out-of-the-box preferences.
+ * @returns the default NotificationSettings.
+ */
 export function defaultNotificationSettings(): NotificationSettings {
   return {
     enabled: true,
@@ -57,7 +60,11 @@ export function migrateV2Settings(storage?: SettingsStorage): NotificationSettin
   }
 }
 
-/** Migrate the v3 shape while layering defaults for pending interactions. */
+/**
+ * Migrate the v3 shape while layering defaults for pending interactions.
+ * @param storage - the storage to read/consume (defaults to the global localStorage).
+ * @returns the migrated settings, or undefined when there is no v3 state.
+ */
 export function migrateV3Settings(storage?: SettingsStorage): NotificationSettings | undefined {
   const target = storage ?? (typeof localStorage === 'undefined' ? undefined : localStorage)
   if (target === undefined) return undefined

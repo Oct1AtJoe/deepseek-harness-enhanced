@@ -1,70 +1,62 @@
-# DSH Desktop Pet — 内置桌面宠物
+# dsh-desktop
 
-DSH 内置桌面宠物，兼容 whale-girl 角色协议，支持 Tauri2 独立壳子。
+English | [中文](README.zh.md)
 
-## 架构
+An Electron shell that wraps the DeepSeek Harness web app (`dsh web`) as a
+desktop application. It is a standalone package (outside the pnpm workspace)
+so its heavy Electron dependencies stay out of the repository install and
+gates.
 
-```
-┌─────────────────────────────────────────────┐
-│ DSH Server (port 3080)                       │
-│                                              │
-│  /desktop-pet/events  ← SSE 事件流           │
-│  /desktop-pet/presence ← 心跳               │
-│  /desktop-pet/assets/* ← 静态资源            │
-│                                              │
-│  packages/desktop-pet/ (内置包)              │
-│    ├── src/index.mjs (服务端)                │
-│    ├── src/settings.mjs (设置)               │
-│    └── src/assets/ (素材)                    │
-└──────────────────┬──────────────────────────┘
-                   │ HTTP/SSE
-┌──────────────────┴──────────────────────────┐
-│ Tauri2 壳子 (desktop/)                       │
-│                                              │
-│  src/pet.js ← 宠物渲染 + 气泡通知            │
-│  src-tauri/src/main.rs ← Rust 端             │
-│  src/index.html ← 入口                       │
-└─────────────────────────────────────────────┘
-```
+## Running
 
-## 安装
-
-```bash
-# 1. 拉取代码
-git pull
-
-# 2. 安装依赖
-pnpm install
-
-# 3. 构建
-pnpm run build
-
-# 4. 启动 DSH Web
-dsh --profile web
-
-# 5. 启动桌宠（另一个终端）
+```sh
 cd desktop
-npx tauri dev
+npm install
+npm start
 ```
 
-## 功能
+Prerequisites: the repository is built (`pnpm run build`, so `apps/web/dist`
+exists) and `node` is on the PATH.
 
-- 🐋 右下角悬浮宠物（可拖拽、可投喂/玩耍）
-- 🎭 多角色支持（鲸鱼娘 + Kanye West）
-- 🔔 气泡通知（DSH 事件实时推送）
-- 🖱️ 点击气泡跳转到对应对话
-- 💤 空闲自动休眠
+The backend is resolved in this order at startup:
 
-## 设置
+1. `DSH_DESKTOP_URL` — load that address directly, no backend is launched.
+2. `http://127.0.0.1:3080` (or `DSH_DESKTOP_PORT`) already serves dsh —
+   attach to the existing server and share its sessions.
+3. Otherwise launch `dsh web --port 0` (a system-assigned free port), parse
+   and load the URL it prints; on exit the launched backend is killed (the
+   whole process tree on Windows).
 
-`~/.dsh/settings.yaml`:
-```yaml
-desktop-pet:
-  enabled: true
-  size: 200
-  character: whale-girl   # whale-girl 或 kanye
-```
+## Configuration
 
-## License
+| Variable | Meaning |
+| --- | --- |
+| `DSH_DESKTOP_URL` | Load this URL directly, skipping probe and launch. |
+| `DSH_DESKTOP_PORT` | Port probed for an existing service (default `3080`). |
+| `DSH_DESKTOP_BACKEND` | Backend command override: a JSON argv array or a space-separated string. |
+| `DSH_DESKTOP_NODE` | *(unused — in development the CLI runs on Electron's bundled Node)* |
 
-MIT
+dsh environment variables such as `DSH_HOME` and `DEEPSEEK_API_KEY` are passed
+through to the backend as-is.
+
+## Smoke test
+
+`npm run smoke` loads the GUI headless (no window shown). On success it prints
+`DSH_DESKTOP_SMOKE_OK` and exits 0; on failure it prints
+`DSH_DESKTOP_SMOKE_FAIL: <reason>` and exits 1. When no server is running it
+also covers the "launch a backend" path; point `DSH_HOME` at a fresh directory
+to isolate the launched instance (the profile self-initializes on first use).
+
+## Packaging
+
+`npm run pack` builds installers with electron-builder (Windows NSIS / macOS
+DMG / Linux AppImage). The packaged app does not embed a dsh runtime: it looks
+for the `dsh` command on the PATH, so the machine running the packaged app
+needs dsh installed (e.g. `npm i -g @deepseek-ai/dsh`) or must set
+`DSH_DESKTOP_BACKEND`.
+
+## Known limitations
+
+- It is a browser window around a local service: standard Edit/View/Window
+  menus only, no tray, auto-start, or other native capabilities.
+- No branded icon yet; the Electron default icon is used.

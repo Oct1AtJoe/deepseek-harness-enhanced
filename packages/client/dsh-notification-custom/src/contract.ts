@@ -69,9 +69,20 @@ export interface NotificationSettings {
   readonly backgroundOnly: boolean
 }
 
+/** Accumulated turn in progress plus the last finalized completion. */
+export interface NotificationProjectionState {
+  /** The open turn's text and tool names; null outside a turn. */
+  readonly openTurn: { readonly turn: number; readonly text: string; readonly tools: string[] } | null
+  /** The last completed turn's summary; null before the first completion. */
+  readonly last: NotificationProjectionValue | null
+}
+
 /** The projection key this plugin owns. */
 declare module '@deepseek-ai/dsh-session-projection/types' {
   interface SessionProjectionMap {
     notification: NotificationProjectionValue
+  }
+  interface SessionProjectionStateMap {
+    notification: NotificationProjectionState
   }
 }

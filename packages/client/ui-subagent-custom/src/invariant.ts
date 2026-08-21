@@ -7,7 +7,7 @@
 import type { Context } from '@deepseek-ai/cordis'
 import type { InvariantInstaller } from '@deepseek-ai/dsh-invariants'
 
-const PACKAGE_NAME = '@deepseek-ai/dsh-client-ui-subagent'
+const PACKAGE_NAME = '@deepseek-ai/dsh-client-ui-subagent-custom'
 
 /** Cordis companion plugin name. */
 export const name = 'client-ui-subagent-invariant'

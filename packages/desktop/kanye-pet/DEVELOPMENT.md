@@ -592,9 +592,8 @@ desktop-tauri/
 - **修复工具**：项目内附 `fix-v5.mjs`（已删除，可从 git 历史找回），自动修复 43 处合并 + 2 处字符串
 
 ```bash
-# 从修复脚本恢复
-git show HEAD:packages/desktop/kanye-pet/fix-v5.mjs > fix-v5.mjs
-node fix-v5.mjs
+# 从修复脚本恢复（该脚本已删除，若需要请从 git 历史获取）
+git show <commit>:packages/desktop/kanye-pet/fix-v5.mjs > fix-v5.mjs
 ```
 
 > **预防**：编辑 `lib/index.mjs` 时只能用纯 UTF-8 编辑器（VS Code、Vim），避免 GBK/GB2312 编码工具。文件包含大量中文注释，编码转换会直接破坏字符。

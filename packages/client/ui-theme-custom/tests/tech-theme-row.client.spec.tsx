@@ -4,7 +4,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { createSnapshotStore, type SessionListState, type WorkspaceListState } from '@deepseek-ai/dsh-client-runtime/client'
-import { bindSnapshotSelector } from '@deepseek-ai/dsh-client-web-react'
+import { bindSnapshotSelector } from '@deepseek-ai/dsh-client-test-runtime'
 import { TechThemeRow, type TechThemeRowProps } from '../src/client/TechThemeRow.tsx'
 import { createTechThemeStore } from '../src/client/settings-store.ts'
 import type { ThemePreference } from '@deepseek-ai/dsh-client-ui-theme/client'

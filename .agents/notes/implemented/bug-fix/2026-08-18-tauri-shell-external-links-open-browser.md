@@ -2,6 +2,8 @@
 
 Status: implemented
 
+English | [中文](2026-08-18-tauri-shell-external-links-open-browser.zh.md)
+
 ## Problem
 
 In the Tauri desktop shell (`desktop-tauri/`), clicking a web link in the GUI does not open the system default browser. Two paths were both broken, unlike the Electron shell (`desktop/main.mjs`) which handles them:

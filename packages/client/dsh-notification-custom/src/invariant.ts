@@ -7,7 +7,7 @@
 import type { Context } from '@deepseek-ai/cordis'
 import type { InvariantInstaller } from '@deepseek-ai/dsh-invariants'
 
-const PACKAGE_NAME = 'dsh-notification'
+const PACKAGE_NAME = '@deepseek-ai/dsh-notification-custom'
 
 /** Cordis companion plugin name. */
 export const name = 'dsh-notification-invariant'

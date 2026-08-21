@@ -1,14 +1,16 @@
 # @deepseek-ai/dsh-notification-custom
 
+[English](README.md) | 中文
+
 [omdsh-dev/dsh-notification](https://github.com/omdsh-dev/dsh-notification)（v0.1.2）的本地 fork。DeepSeek Harness Web GUI 的桌面通知：会话结束一轮时，浏览器弹出系统通知，切走也能知道 DSH 已完成。按结束状态开关 + 包含/排除关键词规则，精确控制哪些完成要提醒。
 
 无需改动 harness：host 侧贡献一个会话投影（每个会话最近完成一轮的有界摘要），client 侧监听会话列表的完成提醒，并应用自己持久化的偏好设置。
 
 ```
-host:   notification 投影（最近一轮的原因/正文/工具名） --session/projection--> 浏览器
-client: 会话列表完成提醒（实时、去重）+ 持久化设置
-        -> 权限 + 当前会话可见性门控
-        -> new Notification("DSH 已完成", { body: 会话标题 })
+host:   notification projection (last turn's reason/text/tools)  --session/projection-->  browser
+client: session list completion reminder (live, dedup) + persisted settings
+        -> permission + current-session visibility gate
+        -> new Notification("DSH finished", { body: title })
 ```
 
 ## 本地补丁（相对上游）
@@ -48,7 +50,7 @@ Host 侧可调参数在 `cordis.yml` 的插件行上：
 - id: dsh-notification-custom
   name: '@deepseek-ai/dsh-notification-custom'
   config:
-    maxBodyChars: 400      # 投影正文预算；更长的回复会在 host 侧省略号截断
+    maxBodyChars: 400      # projection body budget; longer replies are ellipsized host-side
 ```
 
 ## 对模型的影响
@@ -70,7 +72,7 @@ Host 侧可调参数在 `cordis.yml` 的插件行上：
 
 ```sh
 pnpm --filter @deepseek-ai/dsh-notification-custom typecheck
-pnpm run test:gui        # 含本包的 vitest 规格
+pnpm run test:gui        # includes this package's vitest specs
 pnpm --filter @deepseek-ai/dsh-notification-custom bundle
 ```
 

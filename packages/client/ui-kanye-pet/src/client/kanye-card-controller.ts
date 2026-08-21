@@ -132,6 +132,10 @@ export class KanyeCardController {
     }
   }
 
+  /**
+   * The face the card's slot entry injects from this controller.
+   * @returns the registration-side face bridging the staged form onto the settings scope.
+   */
   inject(): KanyeCardFace {
     return {
       toggleEnabled: () => {

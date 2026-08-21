@@ -6,7 +6,7 @@
 
 `setInvocation` 通过注册表的全局调用覆盖写入，该覆盖在列表与加载投影时压过所有 provider 声明的策略。覆盖持久化在 `skill-overrides` 用户设置命名空间下，并在插件挂载时恢复，因此开关在重启后仍然生效，且对面向模型的目录立即可见。写入先作用于注册表，再提交设置文档；持久化失败时实时覆盖仍然保留。
 
-该服务仅 Remote，不声明同进程 Cordis `Context` 合并。客户端包通过显式的 [`api-remotes`](../../api/remotes/README.md) 组装消费，而不导入 Host 实现。
+该服务仅 Remote，不声明同进程 Cordis `Context` 合并。客户端包通过显式的 [`api-remotes`](../../api/remotes/README.zh.md) 组装消费，而不导入 Host 实现。
 
 ## 模型体验
 

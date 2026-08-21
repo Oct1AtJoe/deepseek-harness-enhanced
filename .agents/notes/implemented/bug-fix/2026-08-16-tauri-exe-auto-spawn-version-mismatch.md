@@ -2,6 +2,8 @@
 
 Status: implemented
 
+English | [中文](2026-08-16-tauri-exe-auto-spawn-version-mismatch.zh.md)
+
 ## Problem
 
 Double-clicking the Tauri desktop exe (`DeepSeekHarness.exe`) when port 3080 is free fails with a 60-second timeout. The exe successfully locates and spawns the globally installed `@deepseek-ai/dsh` 0.1.0-rc.6, but the child process crashes 4 seconds into boot:

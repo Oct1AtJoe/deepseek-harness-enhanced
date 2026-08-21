@@ -1,5 +1,7 @@
 # @deepseek-ai/dsh-notification-custom
 
+English | [中文](README.zh.md)
+
 Local fork of [omdsh-dev/dsh-notification](https://github.com/omdsh-dev/dsh-notification) (v0.1.2). Desktop notifications for the DeepSeek Harness web GUI: when a session finishes a turn, the browser shows a system notification, so you can switch away and still know when DSH is done. Per-outcome toggles and include/exclude keyword rules control exactly which completions notify.
 
 No harness change is needed: the host contributes a session projection (a bounded summary of each session's last completed turn), and the client watches the session list's completion reminder and applies its own persisted preferences.
@@ -51,7 +53,7 @@ Host-side tunables live on the plugin row in `cordis.yml`:
     maxBodyChars: 400      # projection body budget; longer replies are ellipsized host-side
 ```
 
-## Model experience
+## Model Experience
 
 | Aspect | Effect |
 | --- | --- |
@@ -74,7 +76,7 @@ pnpm run test:gui        # includes this package's vitest specs
 pnpm --filter @deepseek-ai/dsh-notification-custom bundle
 ```
 
-## Known limitations
+## Known Limitations and Deferred Work
 
 - Notifications require the page to be open (they surface while the page is hidden, but not after the tab is closed). In the desktop shell they route through the shell's notification bridge and appear as Windows toasts.
 - Notifications fire once per finished turn (a running→idle edge on any session); a completion that happened while the page was disconnected is not re-notified on reconnect.

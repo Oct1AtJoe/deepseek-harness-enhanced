@@ -1,9 +1,10 @@
-<h1 align="center">whale-girl</h1>
+# whale-girl
+
+English | [中文](README.zh.md)
 
 <p align="center">
-  <strong>DSH Web GUI 内的桌面宠物（QQ 宠物形态）</strong><br/>
-  右下角悬浮的积累型伙伴：可拖拽、可投喂/玩耍，陪伴你的工作台脉搏——
-  完成任务/会话/活跃陪伴时长积累成资历等级、称号与回忆。
+  <strong>A desktop pet (QQ-pet style) inside the DSH Web GUI</strong><br/>
+  A floating companion in the bottom-right corner: draggable, feedable/playable, keeping the pulse of your workbench — completed tasks, sessions, and active companion time accumulate into seniority levels, titles, and memories.
 </p>
 
 <p align="center">
@@ -13,113 +14,127 @@
 
 ---
 
-## 安装
+## Install
 
-官方 **bundle 插件** 格式（仓库根 `package.json` 的 `dsh.bundle` + `dsh.client`）。经官方 profile 管理：
+Official **bundle plugin** format (`dsh.bundle` + `dsh.client` in the root `package.json`), managed through the official profile:
 
 ```sh
-dsh plugin --profile web add "github:vlln/whale-girl#main"   # 推荐：git 源一行（构建产物已入库）
-# 或本地目录：dsh plugin --profile web add <whale-girl 本地路径>
+dsh plugin --profile web add "github:vlln/whale-girl#main"   # recommended: one-liner from the git source (built artifacts are in the repo)
+# or a local directory: dsh plugin --profile web add <path to local whale-girl>
 ```
 
-装完 **重启 web**（bundle 层在启动时合成），右下角出现宠物：点击弹出菜单（🍗 喂食 / 🎾 玩耍），拖拽可移动；hover 显示状态条（资历等级/任务数/最近共同回忆）。初始配置/欢迎页（onboarding）宠物隐藏。
+After installing, **restart web** (the bundle layer composes at boot) and the pet appears in the bottom-right corner: click for a menu (🍗 feed / 🎾 play), drag to move; hover shows the status bar (seniority level / task count / most recent shared memory). The pet is hidden on the initial setup/welcome (onboarding) page.
 
-更新插件时 `dsh plugin --profile web update whale-girl`（或换 git 源 ref），重启生效。
+To update, run `dsh plugin --profile web update whale-girl` (or switch the git source ref) and restart.
 
-## 使用
+## Usage
 
-| 你做什么 / 发生什么 | 宠物表现 |
+| What you do / what happens | Pet behavior |
 |---|---|
-| 拖拽宠物 | 被斜向拉扯（`drag`） |
-| 点击菜单 🍗 喂食 / 🎾 玩耍 | 啃咬/抛接球（`eat`/`play`）→ 开心（`joy`） |
-| 空闲 ≥60s | 打盹（`sleep`）；互动时醒过来（`wake`） |
-| 任务完成 / 升级 / 称号 / 回合完成 | 举手欢呼（`celebrate`） |
-| 任务失败 / 请求出错 | 惊吓（`error`）→ 失落（`disappointed`） |
-| 新会话开始 | 挥手欢迎（`welcome`） |
-| 任一会话运行/思考中 | 沉思陪伴（`think`，偶尔 `working` 工作姿态） |
-| 等待批准 | 期待等待（`wait`） |
-| 周期游走 | 散步（`walk`） |
-| 常态 | 待机（`idle`，随机眨眼/转身） |
+| Drag the pet | Pulled diagonally (`drag`) |
+| Click menu 🍗 feed / 🎾 play | Nibbles / tosses a ball (`eat`/`play`) → happy (`joy`) |
+| Idle ≥60s | Dozes (`sleep`); wakes on interaction (`wake`) |
+| Task done / level-up / title / round complete | Raises a paw to cheer (`celebrate`) |
+| Task failed / request error | Startled (`error`) → sad (`disappointed`) |
+| New session starts | Waves to welcome (`welcome`) |
+| Any session running/thinking | Contemplative company (`think`, occasionally the `working` pose) |
+| Waiting for approval | Expectant wait (`wait`) |
+| Periodic wander | Takes a stroll (`walk`) |
+| Normal state | Stands by (`idle`, random blinking/turning) |
 
-完整状态机（优先级/转换语义/触发源）见 [docs/state-machine.md](docs/state-machine.md)。
+The full state machine (priority, transition semantics, trigger sources) is documented in the Chinese developer notes (see the `docs/` subdirectory).
 
-## 桌面伴侣（可选）
+## Desktop companion (optional)
 
-`desktop/` 是**独立桌面伴侣应用**（Node 引擎 + Tauri 渲染壳，零运行时依赖），把鲸鱼娘渲染到操作系统桌面常驻。**不随 `dsh plugin` 安装**——想要桌宠的用户自行启用：
+`desktop/` is a **standalone desktop companion app** (Node engine + Tauri render shell, zero runtime dependencies) that renders the whale girl onto the operating system desktop, persistently. It is **not installed with `dsh plugin`** — users who want a desktop pet enable it themselves:
 
 ```sh
-# 前置：Node ≥18；桌面渲染壳需 Rust 工具链（cargo）
+# prerequisites: Node >=18; the desktop render shell needs the Rust toolchain (cargo)
 cd desktop
-npm install                          # 引擎零依赖（无第三方包）
-cd src-tauri && cargo build --release  # 首次编译约 5-15 分钟；产物 target/release/whale-girl-desktop（约 12MB）
-./target/release/whale-girl-desktop   # 启动透明置顶桌宠（默认连本机 DSH 3080）
-# WHALE_GIRL_BASE_URL=http://IP:PORT 指向非本机 DSH
-# 无窗模式：cd desktop && npm run start:headless  # presence 心跳 + 状态轮询 + SSE
+npm install                          # the engine is dependency-free (no third-party packages)
+cd src-tauri && cargo build --release  # first build takes ~5-15 min; binary at target/release/whale-girl-desktop (~12MB)
+./target/release/whale-girl-desktop   # start the transparent always-on-top pet (connects to the local DSH on 3080 by default)
+# point WHALE_GIRL_BASE_URL=http://IP:PORT at a non-local DSH
+# windowless mode: cd desktop && npm run start:headless  # presence heartbeat + state polling + SSE
 ```
 
-- 消费 whale-girl 既有公开端点（`/state`、`/events`、`/presence`、`/interact`、`/config`、`/assets`），**不改动插件本体**；运行期间网页端宠物自动隐藏（presence 契约），退出或崩溃（TTL 45s 过期）后恢复。
-- 渲染壳：Tauri v2（推荐，体积 ~12MB）；Electron 遗留壳保留（`npm i -D electron` 后可用）。
-- 设计与契约见 `desktop/DESIGN.md`、`desktop/BUILD-RUN.md`。
+- Consumes whale-girl's existing public endpoints (`/state`, `/events`, `/presence`, `/interact`, `/config`, `/assets`) and **does not modify the plugin itself**; while it runs, the web pet hides automatically (presence contract), and it restores on exit or crash (TTL 45s expiry).
+- Render shell: Tauri v2 (recommended, ~12MB); the legacy Electron shell is kept (available after `npm i -D electron`).
+- Design and contract: `desktop/DESIGN.md`, `desktop/BUILD-RUN.md`.
 
-## 状态预览
+## State previews
 
-| 状态 | 触发 | 预览 |
-|---|---|---|
-| `idle` | 常态待机 | ![idle](docs/preview/idle.gif) |
-| `working` | 会话思考期随机工作插曲 | ![working](docs/preview/working.gif) |
-| `celebrate` | 任务完成/升级/称号/回合完成 | ![celebrate](docs/preview/celebrate.gif) |
-| `error` | 任务失败/请求出错 | ![error](docs/preview/error.gif) |
-| `disappointed` | 失败后短时失落 | ![disappointed](docs/preview/disappointed.gif) |
-| `joy` | 投喂/玩耍后开心 | ![joy](docs/preview/joy.gif) |
-| `eat` | 点击投喂 | ![eat](docs/preview/eat.gif) |
-| `play` | 点击玩耍 | ![play](docs/preview/play.gif) |
-| `drag` | 拖拽中 | ![drag](docs/preview/drag.gif) |
-| `walk` | 周期游走 | ![walk](docs/preview/walk.gif) |
-| `sleep` | 空闲 ≥60s | ![sleep](docs/preview/sleep.gif) |
-| `wake` | 睡醒过渡 | ![wake](docs/preview/wake.gif) |
-| `welcome` | 新会话 | ![welcome](docs/preview/welcome.gif) |
-| `think` | 会话思考陪伴 | ![think](docs/preview/think.gif) |
-| `wait` | 等待批准 | ![wait](docs/preview/wait.gif) |
+| State | Trigger |
+|---|---|
+| `idle` | Normal stand-by |
+| `working` | Random work interlude during a thinking session |
+| `celebrate` | Task done / level-up / title / round complete |
+| `error` | Task failed / request error |
+| `disappointed` | Short sadness after a failure |
+| `joy` | Happy after feeding/playing |
+| `eat` | Click to feed |
+| `play` | Click to play |
+| `drag` | While dragging |
+| `walk` | Periodic wander |
+| `sleep` | Idle ≥60s |
+| `wake` | Waking transition |
+| `welcome` | New session |
+| `think` | Thinking-company |
+| `wait` | Waiting for approval |
 
-## 配置
+Preview GIFs for each state are tracked in a separate assets branch and not yet included in this repository.
 
-参数经宿主 settings 配置，`<dshHome>/settings.yaml` 的 `whale-girl:` section（或设置 UI）修改后**热生效免重启**：
+## Configuration
+
+Settings are configured through the host settings: edits to the `whale-girl:` section of `<dshHome>/settings.yaml` (or the settings UI) take effect **hot, without a restart**:
 
 ```yaml
 whale-girl:
-  enabled: true      # 网页端渲染开关（与桌面伴侣并存时设 false 关闭网页端宠物，避免双宠物）
-  size: 110          # 宠物尺寸 px（64–160）
-  opacity: 1         # 常态透明度（0.2–1）
+  enabled: true      # web-render toggle (set false to hide the web pet while the desktop companion runs, avoiding a double pet)
+  size: 110          # pet size in px (64-160)
+  opacity: 1         # normal-state opacity (0.2-1)
   walk:
-    enabled: true    # 游走开关
+    enabled: true    # walk toggle
   sleepAfterMs: 60000
 ```
 
-完整配置项清单与语义层（XP/称号）封闭说明见 `lib/src/config.mjs`。**语义层不可配**（改 XP/称号阈值会破坏积累账本一致性）。
+The full key list and the closed semantics layer (XP/titles) are documented in `lib/src/config.mjs`. **The semantics layer is not configurable** (changing XP/title thresholds would break the accumulation ledger's consistency).
 
-## 角色
+## Characters
 
-菜单「🎭 换角色」循环切换角色（或设置 localStorage `whale-girl:character`）；**manifest 仅 1 个角色时按钮置灰**（悬停提示「暂无其他角色」）。每个角色提供**全部 15 状态**素材（素材全量契约，见 [docs/sprites-spec.md](docs/sprites-spec.md)）；贡献新角色指南见 [docs/adding-a-character.md](docs/adding-a-character.md)。
+The menu's "🎭 switch character" cycles characters (or set localStorage `whale-girl:character`); **the button is disabled when the manifest has only one character** (hover hint: "no other character"). Each character provides **all 15 states** of assets; the sprite specification and new-character contribution guide are documented in the Chinese developer notes (see the `docs/` subdirectory).
 
-## 作为参考实现
+## As a reference implementation
 
-whale-girl 是官方 **bundle 插件格式**的完整范本（`dsh.bundle` + `cordis.patch.yml` + `lib/` 布局，随官方机制演进）——开发新插件可对照：
+whale-girl is the complete exemplar of the official **bundle plugin format** (`dsh.bundle` + `cordis.patch.yml` + `lib/` layout, evolving with the official mechanism) — new plugin development can mirror it:
 
-- **结构**：`lib/`（入口/纯逻辑/client/素材）与 docs/decisions/scripts 分离，见根 [AGENTS.md](AGENTS.md)
-- **规范**：门禁（`scripts/gates/run.mjs`）+ 决策记录 + 素材全量契约；开发引导见 plugin-registry 的 [plugin-registry-create skill](https://github.com/vlln/plugin-registry/tree/main/skills/plugin-registry-create) 与 [cookbook](https://github.com/vlln/plugin-registry/blob/main/docs/cookbook/creating-a-repository-plugin.md)，踩过的坑见 [gotchas](https://github.com/vlln/plugin-registry/blob/main/skills/plugin-registry-create/references/gotchas.md)
+- **Structure**: `lib/` (entry / pure logic / client / assets) kept separate from docs/decisions/scripts
+- **Discipline**: gates (`scripts/gates/run.mjs`) + decision records + full-asset contract; the development onboarding lives in plugin-registry's [plugin-registry-create skill](https://github.com/vlln/plugin-registry/tree/main/skills/plugin-registry-create) and [cookbook](https://github.com/vlln/plugin-registry/blob/main/docs/cookbook/creating-a-repository-plugin.md), and the pitfalls hit are in [gotchas](https://github.com/vlln/plugin-registry/blob/main/skills/plugin-registry-create/references/gotchas.md)
 
-## 贡献
+## Contributing
 
-**欢迎提交 issue 和建议**——你的反馈直接决定宠物的下一步：
+**Issues and suggestions are welcome** — your feedback directly shapes the pet's next step:
 
-- 🐛 **遇到问题**：提交 issue，附复现步骤、浏览器与 dsh 版本；客户端问题附控制台报错更佳
-- 💡 **功能建议**：参考 [docs/state-machine.md](docs/state-machine.md) 与 [docs/growth-system.md](docs/growth-system.md) 了解现状，说明期待效果
-- 🎨 **新角色**：见 [docs/adding-a-character.md](docs/adding-a-character.md) §贡献角色速览——只读契约，产出 15 张 sheet + manifest 条目，本地 `verify-assets` 验收
-- 🔧 **代码贡献**：每个非平凡改动带决策记录（`decisions/`）、门禁自证、单一性质提交（见 [docs/AGENTS.md](docs/AGENTS.md) 与根 [AGENTS.md](AGENTS.md)）
+- 🐛 **Hit a problem**: file an issue with reproduction steps, browser and dsh versions; for client problems, include the console error if you can
+- 💡 **Feature suggestion**: read the Chinese developer notes (`docs/` subdirectory) for the current state machine and growth system, then describe the expected effect
+- 🎨 **New character**: see the sprite specification and adding-a-character guide (Chinese developer notes) — produce 15 sheets + a manifest entry, and accept locally with `verify-assets`
+- 🔧 **Code contribution**: every non-trivial change ships with a decision record (`decisions/`), gate self-proof, and a single-topic commit
 
-## 致谢
+## Credits
 
-角色形象由 [ZipZipPipe](https://space.bilibili.com/4168597) 创作（《鲸鱼娘》表情包角色），sprites 基于其角色设定生成。
+The character art is by [ZipZipPipe](https://space.bilibili.com/4168597) (《whale-girl》 meme character); the sprites are generated from the character's design.
+
+## Model Experience
+
+whale-girl is a **dsh bundle plugin** that adds a desktop pet overlay to the GUI. It does not produce model-visible output, consume model input, or modify tool results.
+
+## Known Limitations and Deferred Work
+
+- The pet runs in a separate HTML Canvas overlay on the page, controlled by its own `lib/client.js` bundle. The overlay is not responsive to the GUI's light/dark/system preference — always a dark-themed container.
+- The state machine, growth system, and multi-sprite character framework are implemented but documented only in the Chinese developer notes (`docs/` subdirectory). English developer docs are deferred.
+- Preview GIFs for each emotion state are not yet included in the repository; they are tracked in a separate assets branch.
+- The `lib/client.js` bundle is built with esbuild and checked into the repository — it should be regenerated after any client-side change (`pnpm build:client`).
+- Adding a new character requires creating sprite sheets at the correct pixel sizes and adding a manifest entry. This is straightforward but not yet automated.
 
 ## License
 

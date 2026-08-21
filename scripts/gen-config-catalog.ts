@@ -7,7 +7,7 @@
  * the committed artifact.
  */
 
-import { globSync, readFileSync, writeFileSync } from 'node:fs'
+import { existsSync, globSync, readFileSync, writeFileSync } from 'node:fs'
 import { dirname, resolve, sep } from 'node:path'
 import ts from 'typescript'
 import { LINK_MAP } from './gen-cordis-catalog.ts'
@@ -585,7 +585,7 @@ export function collectConfigCatalog(scanRoot: string = root): CatalogEntry[] {
   const manifests: { dir: string; pkg: string }[] = []
   for (const manifestRel of globSync('packages/*/*/package.json', { cwd: scanRoot }).map(path => path.split(sep).join('/')).sort()) {
     const dir = manifestRel.slice(0, -'/package.json'.length)
-    const manifest = JSON.parse(readFileSync(resolve(scanRoot, manifestRel), 'utf8')) as { name?: string; os?: string[]; cpu?: string[] }
+    const manifest = JSON.parse(readFileSync(resolve(scanRoot, manifestRel), 'utf8')) as { name?: string; os?: string[]; cpu?: string[]; main?: string }
     const pkg = manifest.name
     if (!pkg) {
       violations.push(`${manifestRel} has no "name".`)
@@ -597,6 +597,9 @@ export function collectConfigCatalog(scanRoot: string = root): CatalogEntry[] {
       continue
     }
     pkgDirByName.set(pkg, dir)
+    // A plain-JS bundle package (kanye-pet) ships compiled lib/ without a src/
+    // entry; the config catalog has no TypeScript surface to classify from it.
+    if (manifest.main?.endsWith('.mjs') && !existsSync(resolve(scanRoot, dir, 'src'))) continue
     manifests.push({ dir, pkg })
   }
   const world: World = { scanRoot, cache, pkgDirByName }

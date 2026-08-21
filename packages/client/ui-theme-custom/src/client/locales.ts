@@ -8,6 +8,7 @@ export const zh = {
   'tech-theme.nebula': '星云',
 } satisfies Record<string, string>
 
+/** English dictionary checked against the Chinese key set. */
 export const en = {
   'tech-theme.title': 'Tech themes',
   'tech-theme.aurora': 'Aurora',

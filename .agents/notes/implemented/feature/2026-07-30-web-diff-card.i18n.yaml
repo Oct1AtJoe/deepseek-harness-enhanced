@@ -3,4 +3,4 @@
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/feature/2026-07-30-web-diff-card.md
 2026-07-30-web-diff-card.md: 454f02b756d1f3b50f595b268a1f6d40af20fc4f
-2026-07-30-web-diff-card.zh.md: 35aeb91a57d3fa009bb590529c1f547fafe3e471
+2026-07-30-web-diff-card.zh.md: f87eb444ae4b839167b6661ce6485cf0b13f632c

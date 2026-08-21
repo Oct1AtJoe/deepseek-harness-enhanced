@@ -6,7 +6,7 @@
 
 写操作向 harness 级用户补丁层（`~/.dsh/cordis.patch.yml`，经 `dshHomePath`）追加条目，boot 监视器热重载——改动无需重启即生效。`list` 的来源通过解析同一补丁文件得出：在那里出现的行 id 报告 `source: 'user'`，其余为 `source: 'bundle'`。`updateConfig` 浅替换整行配置，因此调用方发送完整的下一个配置；`installBackend` 拒绝内置后端与目录之外的模块；`removeBackend` 拒绝既非后端也非具名工具的未知行。
 
-该服务仅 Remote，不声明同进程 Cordis `Context` 合并。客户端包通过显式 [`api-remotes`](../../api/remotes/README.md) 装配消费，而非导入 Host 实现。
+该服务仅 Remote，不声明同进程 Cordis `Context` 合并。客户端包通过显式 [`api-remotes`](../../api/remotes/README.zh.md) 装配消费，而非导入 Host 实现。
 
 ## 模型体验
 

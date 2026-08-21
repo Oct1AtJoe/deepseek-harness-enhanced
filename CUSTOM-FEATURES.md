@@ -160,6 +160,23 @@
 
 ---
 
+## 11. 门禁脚本 fork 分叉（2026-08-21 上游同步引入）
+
+上游同步后两个生成器脚本与 fork 现实冲突，已按"fork 侧打补丁"解决（上游不改）：
+
+- `scripts/gen-config-catalog.ts` — 预扫新增 JS bundle 跳过：`manifest.main?.endsWith('.mjs') && !existsSync(resolve(scanRoot, dir, 'src'))` 的包（`kanye-pet`，发布编译 `lib/` 无 `src/`）无 TypeScript 可分类面，直接 `continue`（含 `existsSync` 导入）。
+- `scripts/gen-cordis-catalog.ts` — `TYPE_LINK_EXEMPTIONS` 新增 `SkillInvocationPolicy`（功能 10 的 skill 调用覆写契约，文档归属 `packages/skill/skill/README.md`，不在 catalog 分类文档内）。
+
+同次同步（upstream-master @ `725731a7`，官方 2026-08-21 快照）的合并适配点：
+
+- **projection API 换形**：`session-projection` 的 `register()` 现要求 `wire: { viewSchema, view }`（client-visible 键强制带 wire）；fork 的 `dsh-notification-custom` 已按新形适配（`schema` → `stateSchema`，顶层 `view` → `wire.view`，`SessionProjectionStateMap` 增补 `notification` 状态条目，`satisfies` 收敛 S 推断）。
+- **测试运行时改包**：`@deepseek-ai/dsh-client-web-react` 上游移除，`bindSnapshotSelector` 等测试工具改由 `@deepseek-ai/dsh-client-test-runtime`（`packages/test-support/client-runtime`）导出；fork 侧 `ui-settings-skills`、`ui-theme-custom` 两个 spec 的 import 已换源（两包 devDependencies 早已声明新包）。
+- **llm-pi-ai 适配器测试**：上游 `PiAiAdapterOptions` 新增必填 `auth`（测试侧 `memoryAuth()`）与 `ImageAttachmentLimits.maxImageDimension`；fork 的占位符测试与 `maxRetries: 10` 断言按上游新基线重合并（保留 10）。
+- **图片路由终局**：deepseek 路由的图片能力由上游原生 data-URL 管线（`offloadRequestImages` / `maxRequestImageBytes`）取代 fork 的文本占位符方案；pi-ai 路由保留 fork 占位符（文本模态兜底，见功能 3）。
+- 新增 `desktop/`（Electron 壳）文档英文化（EN `README.md` + `README.zh.md` 配对）；`kanye-pet`、`desktop-tauri` 补建双语配对；两个 Tauri bug-fix Agent Note 补 `.zh.md`。配对门禁 1025 对全绿。
+
+---
+
 ## 通用重放备忘
 
 - **构建**：改动全在 `packages/`，需重建 client bundle：`pnpm --filter <pkg> bundle`（或仓库级 Client pass）；GUI 无热更，刷新前确认 `:3080` 提供的 `lib/client.js` 已更新。

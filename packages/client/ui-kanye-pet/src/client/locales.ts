@@ -1,3 +1,4 @@
+/** Chinese dictionary; its key set defines KanyeLocaleKey. */
 export const zh = {
   tab: '桌宠',
   cardTitle: '桌宠',
