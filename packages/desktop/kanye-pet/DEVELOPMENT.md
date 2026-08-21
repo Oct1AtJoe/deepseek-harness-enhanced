@@ -84,7 +84,7 @@ export function buildSchema() {
   return z.object({
     enabled: z.boolean().default(true),
     desktopPetEnabled: z.boolean().default(true),
-    size: z.number().min(100).max(600).default(300),  // ← 这里改范围
+    size: z.number().min(100).max(300).default(150),  // ← 这里改范围/默认值
     opacity: z.number().min(0.2).max(1).default(1),
     character: z.string().default('kanye'),
     walk: z.object({ /* ... */ }),
@@ -327,11 +327,22 @@ private field(field: 'size' | 'opacity'): KanyeFieldState {
   if (trimmed === '' || !Number.isFinite(Number(trimmed)))
     return { text: staged.text, invalid: trimmed !== '' }
   const num = Number(trimmed)
-  if (field === 'size' && (num < 100 || num > 600)) return { text: staged.text, invalid: true }
+  if (field === 'size' && (num < 100 || num > 300)) return { text: staged.text, invalid: true }
   if (field === 'opacity' && (num < 0.2 || num > 1)) return { text: staged.text, invalid: true }
   return { text: staged.text, invalid: false }
 }
 ```
+
+### 4.5 重置按钮硬编码
+
+`ui-kanye-pet/src/client/KanyeCard.tsx` 中每个 `NumberField` 的 `onReset` 直接写死了重置值：
+
+```tsx
+onReset={() => { props.edit('size', '150') }}     // ← 改默认值时同步改这里
+onReset={() => { props.edit('opacity', '1') }}    // ← 透明度默认值
+```
+
+> **坑点**：改 `DEFAULTS.size` 时，**必须同时改 KanyeCard.tsx 里的 reset 硬编码**，否则点重置会恢复到旧值。
 
 ---
 
@@ -563,9 +574,12 @@ desktop-tauri/
 1. 在 `config.mjs` 的 `buildSchema()` 中添加 Zod 字段
 2. 在 `DEFAULTS` 中添加默认值
 3. 在 `ui-kanye-pet` 的 `KanyeSettings` interface 中添加字段
-4. 在 `KanyeCard.tsx` 中添加 UI 控件
+4. 在 `KanyeCard.tsx` 中添加 UI 控件 + **reset 硬编码**
 5. 在 `kanye-card-controller.ts` 中添加校验
 6. 在 `locales.ts` 中添加文案
+7. 若影响桌宠窗口尺寸，同步改 `desktop-tauri/src/pet.js` 的 `applyConfig` 和 `lib.rs` 的初始窗口
+
+> **坑点**：改默认值时，reset 硬编码（§4.5）、schema default、`DEFAULTS`、前端校验、locale 提示、`pet.js` 的 `Math.min` 上限**六处必须同步**。
 
 ### 9.3 lib/index.mjs 损坏修复
 
