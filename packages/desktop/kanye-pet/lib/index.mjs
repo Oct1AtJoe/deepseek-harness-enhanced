@@ -141,6 +141,11 @@ export function apply(ctx) {
   let celebrateUntil = 0
   // 桌面伴侣在场窗口（心跳写面，�?src/presence.mjs）：在场时网页端宠物隐藏
   let companionUntil = 0
+  // ---- 桌宠气泡通知队列（单槽：只保留最新一条）----
+  let petNotification = null   // { tag, title, body, sessionId, expiresAt }
+  const NOTIFY_TTL_MS = 60_000
+  /** 每个 session 最后通知过的 turn/end 的 seq（未通知过的 turn/end 才发通知） */
+  const lastTurnEndNotif = new Map()   // sessionId → seq
 
   // ---- 会话状态聚合（v8：官方自渲染 client �?ctx.sessions——Node half 聚合�?/state�?---
   // client 自执行脚�?`apply({})` 拿不到宿�?sessions 服务（官方注入面只给 __DSH_BOOT__），
@@ -333,6 +338,40 @@ export function apply(ctx) {
         const base = known ?? { ...createSessionView(id, since), title: resolveSessionTitle(session) }
         const view = applySessionView(base, event)
         if (known === undefined || view !== known) sessionViews.set(id, view)
+        // ---- 扫描 event log 中未通知过的 turn/end ----
+        if (configRef.desktopPetEnabled !== false) {
+          const events = typeof session?.events?.slice === 'function' ? session.events : []
+          if (!lastTurnEndNotif.has(id)) {
+            let lastSeq = -1
+            for (const e of events) {
+              if (e?.type === 'turn/end' && (e.seq ?? 0) > lastSeq) lastSeq = e.seq
+            }
+            if (lastSeq >= 0) lastTurnEndNotif.set(id, lastSeq)
+          } else {
+            const lastSeq = lastTurnEndNotif.get(id) ?? -1
+            for (const e of events) {
+              if (e?.type === 'turn/end' && e?.data?.turn != null && (e.seq ?? 0) > lastSeq) {
+                const turn = e.data.turn
+                const reason = e.data.reason?.kind ?? 'completed'
+                const title = reason === 'completed' ? '任务完成'
+                  : reason === 'error' ? '任务出错'
+                  : reason === 'aborted' || reason === 'interrupted' ? '任务中止'
+                  : '任务完成'
+                const body = resolveSessionTitle(session) ?? (typeof session?.label === 'string' ? session.label : null) ?? id
+                petNotification = {
+                  tag: `turn-${turn}-${id}-${Date.now()}`,
+                  title,
+                  body,
+                  sessionId: id,
+                  expiresAt: Date.now() + NOTIFY_TTL_MS,
+                }
+                console.log(`[kanye-pet] turn/end ${turn} ${reason} for ${id}: "${title}"`)
+                broadcastEvent()
+                lastTurnEndNotif.set(id, e.seq)
+              }
+            }
+          }
+        }
         const parsed = parseTurnEvent(event)
         if (parsed === null) return
         if (parsed.kind === 'start') {
@@ -365,10 +404,22 @@ export function apply(ctx) {
             }
             // 轮询端点：禁缓存，防止启发式缓存读到冻结状态�?            // 先跑 activity()（有记账副作用），再�?state——响应里�?pet 才是记账后的值
   const act = activity()
+            // 过期清理通知
+            if (petNotification !== null && petNotification.expiresAt < Date.now()) {
+              console.log(`[kanye-pet] /state: petNotification expired, clearing`)
+              petNotification = null
+            }
+            const notifPayload = petNotification === null ? null : {
+              tag: petNotification.tag,
+              title: petNotification.title,
+              body: petNotification.body,
+              sessionId: petNotification.sessionId,
+            }
             json(res, 200, {
               apiVersion: SNAPSHOT_API_VERSION,
               pet: state,
               activity: act,
+              notification: notifPayload,
               configRevision,
               companionOnline: companionOnline(companionUntil, Date.now()),
             }, { 'cache-control': 'no-store' })
