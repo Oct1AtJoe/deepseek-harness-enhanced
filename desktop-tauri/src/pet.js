@@ -1,6 +1,7 @@
 // Desktop pet window renderer - transparent, draggable.
 const DSH_BASE = 'http://127.0.0.1:3080';
 const CONFIG_URL = `${DSH_BASE}/kanye-pet/config`;
+const STATE_URL = `${DSH_BASE}/kanye-pet/state`;
 const ASSETS = `${DSH_BASE}/kanye-pet/assets`;
 const MANIFEST_URL = `${ASSETS}/manifest.json`;
 const POLL_MS = 2000;
@@ -16,6 +17,7 @@ let frameDir = 1;
 let lastFrameAt = 0;
 let currentConfig = { enabled: true, size: 200, character: 'kanye', opacity: 1 };
 let dragging = false;
+let clickStart = null;           // { x, y } 点击起始位置，与 dragState 区分点击 vs 拖拽
 
 // ---- Drag handler (manual set_position, no Windows Snap) ----
 // 不用 Tauri start_dragging（触 Windows Aero Snap），改用 pointer events +
@@ -25,6 +27,12 @@ let winX = 0, winY = 0;         // 当前窗口位置（逻辑像素，本地追
 let dragState = null;            // { offsetX, offsetY } 拖拽中鼠标相对窗口偏移
 let dragRafId = null;            // requestAnimationFrame id（节流 set_position）
 let pendingPos = null;           // { x, y } 等待 flush 的位置
+
+// ---- 气泡通知 ----
+let lastNotifTag = null
+let bubbleEl = null
+let bubbleTimer = null
+let currentNotif = null
 
 // 启动时同步窗口位置（窗口状态插件可能已恢复上次位置）
 async function queryPosition() {
@@ -60,6 +68,7 @@ function scheduleSetPosition(x, y) {
 function handlePointerDown(e) {
   if (e.button !== 0) return;
   e.preventDefault();
+  clickStart = { x: e.screenX, y: e.screenY };
   // 记录鼠标相对窗口偏移（screenX/Y 逻辑像素）
   dragState = {
     offsetX: e.screenX - winX,
@@ -72,6 +81,10 @@ function handlePointerDown(e) {
 
 function handlePointerMove(e) {
   if (!dragState) return;
+  // 移动超过 6px → 判定为拖拽，不再是点击
+  if (clickStart && Math.hypot(e.screenX - clickStart.x, e.screenY - clickStart.y) > 6) {
+    clickStart = null;
+  }
   const newX = e.screenX - dragState.offsetX;
   const newY = e.screenY - dragState.offsetY;
   winX = newX;
@@ -81,6 +94,13 @@ function handlePointerMove(e) {
 
 function handlePointerUp(e) {
   if (!dragState) return;
+  // 判定为点击（无显著移动）→ 弹出 DSH 主窗口
+  if (clickStart) {
+    const invoke = window.__TAURI_INTERNALS__?.invoke;
+    if (typeof invoke === 'function') {
+      invoke('pet_show_main').catch(() => {});
+    }
+  }
   // 刷掉最后挂起的位置
   if (dragRafId) {
     cancelAnimationFrame(dragRafId);
@@ -95,6 +115,7 @@ function handlePointerUp(e) {
   }
   dragState = null;
   dragging = false;
+  clickStart = null;
   pet.style.cursor = 'grab';
 }
 
@@ -104,6 +125,37 @@ function setupDrag() {
   pet.addEventListener('pointermove', handlePointerMove);
   pet.addEventListener('pointerup', handlePointerUp);
   pet.addEventListener('pointercancel', handlePointerUp);
+}
+
+// ---- 气泡通知 ----
+function showBubble(n) {
+  if (!n || n.tag === lastNotifTag) { console.log('[pet] showBubble skip: n=', !!n, 'tagRepeat=', n?.tag === lastNotifTag, 'lastTag=', lastNotifTag); return }
+  console.log('[pet] showBubble SHOW:', n.title, n.body, 'tag=', n.tag)
+  lastNotifTag = n.tag
+  currentNotif = n
+  if (!bubbleEl) {
+    bubbleEl = document.createElement('div')
+    bubbleEl.id = 'pet-bubble'
+    bubbleEl.style.display = 'none'
+    document.body.appendChild(bubbleEl)
+    bubbleEl.addEventListener('click', () => {
+      if (!currentNotif) return
+      const invoke = window.__TAURI_INTERNALS__?.invoke
+      if (typeof invoke === 'function') {
+        invoke('pet_open_session', { sessionId: currentNotif.sessionId }).catch(() => {})
+      }
+    })
+  }
+  bubbleEl.innerHTML = `<strong>${escapeHtml(n.title)}</strong><span>${escapeHtml(n.body)}</span>`
+  bubbleEl.style.display = 'flex'   // flex column：标题/正文分行（CSS 里已定 flex-direction）
+  clearTimeout(bubbleTimer)
+  bubbleTimer = setTimeout(() => { bubbleEl.style.display = 'none' }, 8000)
+}
+
+function escapeHtml(s) {
+  return String(s ?? '').replace(/[&<>"']/g, c => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
+  }[c]))
 }
 
 // ---- Config ----

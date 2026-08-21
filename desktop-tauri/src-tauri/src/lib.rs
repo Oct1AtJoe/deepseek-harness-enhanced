@@ -475,6 +475,21 @@ fn open_session(app: &AppHandle, session_id: &str) {
     }
 }
 
+/// 桌宠气泡点击：显示主窗口并跳转到会话（与 Windows 通知点击同一行为）。
+#[tauri::command]
+fn pet_open_session(app: AppHandle, session_id: String) {
+    show_main(&app);
+    if !session_id.is_empty() {
+        open_session(&app, &session_id);
+    }
+}
+
+/// 桌宠本体点击：显示主窗口（弹到桌面最上层）。
+#[tauri::command]
+fn pet_show_main(app: AppHandle) {
+    show_main(&app);
+}
+
 /// 收到任务完成信号后的壳侧动作：未读数 +1；默认仅窗口失焦/隐藏时弹通知（force 时无条件弹）。
 /// 携带 session_id 时给 toast 挂点击回调：点击后聚焦窗口并跳转到对应会话。
 fn notify_completed(app: &AppHandle, title: Option<&str>, body: &str, force: bool, session_id: Option<&str>) {
@@ -933,6 +948,7 @@ pub fn run() {
             log::info!("收到第二实例请求（args={args:?}），显示主窗口");
             show_main(app);
         }))
+        .invoke_handler(tauri::generate_handler![pet_open_session, pet_show_main])
         .manage(DshState {
             child: Mutex::new(None),
             spawned_this_run: AtomicBool::new(false),
