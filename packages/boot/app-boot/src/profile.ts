@@ -224,7 +224,7 @@ export function healProfilesModuleFallback(installAnchor: string, home: string =
   const profilesDir = join(home, PROFILES_DIR)
   const modulesDir = join(profilesDir, 'node_modules')
   mkdirSync(modulesDir, { recursive: true })
-  const appManifest = JSON.parse(readFileSync(installAnchor, 'utf8')) as ProfileManifest
+  const appManifest = JSON.parse(readFileSync(installAnchor, 'utf8').replace(/^\uFEFF/, '')) as ProfileManifest
   const links = new Map<string, string>()
   /* v8 ignore next -- a real app manifest always declares its name */
   if (appManifest.name !== undefined) links.set(appManifest.name, dirname(installAnchor))
@@ -244,7 +244,7 @@ export function healProfilesModuleFallback(installAnchor: string, home: string =
       if (dir === undefined) continue
       links.set(dep, dir)
       const manifestPath = join(dir, 'package.json')
-      queue.push({ anchor: manifestPath, manifest: JSON.parse(readFileSync(manifestPath, 'utf8')) as ProfileManifest })
+      queue.push({ anchor: manifestPath, manifest: JSON.parse(readFileSync(manifestPath, 'utf8').replace(/^\uFEFF/, '')) as ProfileManifest })
     }
   }
   for (const [packageName, target] of links) {
@@ -269,7 +269,7 @@ export function readProfileManifest(binName: string, dir: string): ProfileManife
     throw new Error(`${binName}: failed to read profile manifest ${path}: ${String(error)}`)
   }
   // The field checks below validate the file data before trusting the parse type.
-  const parsed = JSON.parse(raw) as ProfileManifest | null
+  const parsed = JSON.parse(raw.replace(/^\uFEFF/, '')) as ProfileManifest | null
   if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) {
     throw new Error(`${binName}: profile manifest ${path} must hold a JSON object`)
   }
@@ -387,7 +387,7 @@ export function loadProfile(
   const bundles = manifest.dsh?.profile?.bundles ?? []
   const layers = bundles.map((packageName): ProfileLayer => {
     const packageDir = resolveBundleDir(binName, packageName, installAnchor, dir)
-    const bundleManifest = JSON.parse(readFileSync(join(packageDir, 'package.json'), 'utf8')) as ProfileManifest
+    const bundleManifest = JSON.parse(readFileSync(join(packageDir, 'package.json'), 'utf8').replace(/^\uFEFF/, '')) as ProfileManifest
     const declared = bundleManifest.dsh?.bundle?.patch
     if (declared === undefined) {
       throw new Error(`${binName}: profile bundle ${JSON.stringify(packageName)} declares no dsh.bundle in its package.json`)
