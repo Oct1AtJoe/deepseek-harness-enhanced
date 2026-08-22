@@ -235,6 +235,7 @@
       "@deepseek-ai/dsh-client-ui-resend-failed-round": ["./packages/client/ui-resend-failed-round/src"],
       "@deepseek-ai/dsh-client-ui-subagent-custom": ["./packages/client/ui-subagent-custom/src"],
       "@deepseek-ai/dsh-notification-custom": ["./packages/client/dsh-notification-custom/src"],
+      "@deepseek-ai/dsh-client-ui-msg-nav": ["./packages/client/ui-msg-nav/src"],
       "@deepseek-ai/dsh-client-ui-settings": ["./packages/client/ui-settings/src"],
       "@deepseek-ai/dsh-client-ui-settings-general": ["./packages/client/ui-settings-general/src"],
       "@deepseek-ai/dsh-client-ui-settings-models": ["./packages/client/ui-settings-models/src"],

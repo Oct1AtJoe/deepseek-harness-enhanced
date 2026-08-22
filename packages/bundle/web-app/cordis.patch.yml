@@ -356,6 +356,10 @@
     - id: dsh-notification-custom
       name: '@deepseek-ai/dsh-notification-custom'
 
+    # Conversation node navigation rail; forks the marketplace dsh-plugin-msg-nav.
+    - id: ui-msg-nav
+      name: '@deepseek-ai/dsh-client-ui-msg-nav'
+
 # ── the agent plane moves behind agent presets ─────────────────────────────
 #
 # Every row below composes what ONE agent contributes to the host registries:
