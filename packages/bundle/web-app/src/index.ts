@@ -56,7 +56,7 @@ export interface Config {
 }
 
 export const Config: z<Config> = z.object({
-  openBrowser: z.boolean().default(true),
+  openBrowser: z.boolean().default(false),
   printUrl: z.boolean().default(true),
   surfaceContext: z.boolean().default(true),
   trustedHosts: z.array(String).default([]),

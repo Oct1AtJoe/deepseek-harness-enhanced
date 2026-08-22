@@ -49,13 +49,13 @@ function webCommand(): Command {
     .description('Serve the DeepSeek Harness browser UI.')
     .helpOption('-h, --help', 'show this help')
     .option('--host <host>', 'bind host')
-    .option('--no-open', 'do not open the Web UI in the default browser')
+    .option('--open', 'open the Web UI in the default browser after startup')
     .option('--port <port>', 'listen port; pass 0 to let the OS pick a free one')
     .option('--trusted-host <authority...>', 'extra authority the /api browser-trust fence accepts (host or host:port; repeatable)')
     .addHelpText('after', `
 Examples:
-  dsh --profile web                          serve on the composed host and port
-  dsh --profile web --no-open                serve without opening a browser
+  dsh --profile web                          serve on the composed host and port (no browser)
+  dsh --profile web --open                   serve and open the default browser
   dsh --profile web --port 8080              serve on another port
 `)
 }
