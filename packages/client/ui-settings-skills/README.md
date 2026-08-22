@@ -8,11 +8,19 @@ The tab renders a searchable catalog where each skill card shows its name, descr
 
 ## Model Experience
 
-None directly: this package renders a management surface and performs no model-facing prompt, tool, message, or provider request of its own. Its writes are the user's explicit invocation overrides, whose model-visible effect is owned and logged by the Host skill registry (see [`dsh-host-skill-manager`](../../host/skill-manager/README.md)).
+### Invocation override writes
+
+#### What the model sees
+
+Nothing from this package: the tab renders a management surface and assembles no prompt, tool, or message. Its only model-relevant act is the user's explicit override write through `skillManager/setInvocation`; the skill catalog that changes as a result is rendered and logged by [`dsh-tool-skill`](../../skill/tool-skill/README.md) over the registry state this Remote writes (see [`dsh-host-skill-manager`](../../host/skill-manager/README.md)).
+
+#### Token effect
+
+Zero tokens from this package. A flip's token effect is the catalog delta it causes, carried by the `dsh-tool-skill` catalog message.
 
 #### KV Cache effect
 
-None; this package never assembles model input.
+None from this package; it never assembles request context. Catalog append and replacement behavior belongs to the Host-owned injection.
 
 ## Known Limitations and Deferred Work
 

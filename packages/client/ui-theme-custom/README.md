@@ -8,11 +8,11 @@ The package ships the moved token files (`aurora.ts`, `nebula.ts` — nebula car
 
 ## Model Experience
 
-No model-facing requests: the plugin only registers CSS token sets into the browser theme registry. It performs no prompt, tool, message, or provider work and touches no session log.
+None, as the plugin only registers CSS token sets into the browser theme registry; it performs no prompt, tool, message, or provider work and touches no session log.
 
-#### KV cache impact
+#### KV Cache effect
 
-None — no model input is assembled.
+None; this package neither assembles nor sends a provider request.
 
 ## Known Limitations and Deferred Work
 

@@ -8,11 +8,19 @@ Web 设置「插件」分区中的技能管理标签页。浏览器插件注册�
 
 ## 模型体验
 
-本包自身无直接模型请求：它只渲染管理界面，不发起自己的提示词、工具、消息或 provider 请求。其写入即用户的显式调用覆盖，模型可见效果由 Host 技能注册表所有并记录（见 [`dsh-host-skill-manager`](../../host/skill-manager/README.zh.md)）。
+### 调用覆盖写入
 
-#### KV 缓存影响
+#### 模型看到的内容
 
-无；本包从不组装模型输入。
+本包自身不向模型呈现任何内容：标签页只渲染管理界面，不组装提示词、工具或消息。它唯一与模型相关的行为是用户显式的覆盖写入，经 `skillManager/setInvocation` 发出；由此变化的技能目录由 [`dsh-tool-skill`](../../skill/tool-skill/README.zh.md) 基于本 Remote 写入的注册表状态渲染并记录（见 [`dsh-host-skill-manager`](../../host/skill-manager/README.zh.md)）。
+
+#### Token 影响
+
+本包贡献零 token。一次翻转的 token 效应是它引起的目录变化，由 `dsh-tool-skill` 的目录消息承载。
+
+#### KV Cache 影响
+
+本包无；它从不组装请求上下文。目录的追加与替换行为属于 Host 持有的注入。
 
 ## 已知限制与待办
 

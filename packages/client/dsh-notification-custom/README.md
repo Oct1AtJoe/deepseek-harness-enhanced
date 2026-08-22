@@ -53,14 +53,9 @@ Host-side tunables live on the plugin row in `cordis.yml`:
     maxBodyChars: 400      # projection body budget; longer replies are ellipsized host-side
 ```
 
-## Model Experience
+## License
 
-| Aspect | Effect |
-| --- | --- |
-| Token cost | None — notifications are UI-only and never enter a request. |
-| Tool calls | None — the model gets no new tool. |
-| Session log | Unchanged — the projection reads the existing log and adds no events. |
-| Prompt | Unchanged — no system-prompt section is registered. |
+MIT
 
 ## Permission boundary
 
@@ -76,13 +71,17 @@ pnpm run test:gui        # includes this package's vitest specs
 pnpm --filter @deepseek-ai/dsh-notification-custom bundle
 ```
 
+## Model Experience
+
+None, as the plugin surfaces desktop notifications over a browser-bound session projection; it registers no prompt, tool, or message and writes nothing to the session log.
+
+#### KV Cache effect
+
+None; this package neither assembles nor sends a provider request.
+
 ## Known Limitations and Deferred Work
 
 - Notifications require the page to be open (they surface while the page is hidden, but not after the tab is closed). In the desktop shell they route through the shell's notification bridge and appear as Windows toasts.
 - Notifications fire once per finished turn (a running→idle edge on any session); a completion that happened while the page was disconnected is not re-notified on reconnect.
 - The rule subject is the session title plus the last turn's reply text and tool names — earlier turns are not matched.
 - Notification body is a flat text snippet; clicking a notification focuses the window and, when a session id was attached, selects that session in the GUI (no deep link to the exact turn).
-
-## License
-
-MIT

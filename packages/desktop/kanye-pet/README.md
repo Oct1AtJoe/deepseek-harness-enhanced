@@ -124,9 +124,17 @@ whale-girl is the complete exemplar of the official **bundle plugin format** (`d
 
 The character art is by [ZipZipPipe](https://space.bilibili.com/4168597) (《whale-girl》 meme character); the sprites are generated from the character's design.
 
+## License
+
+MIT License
+
 ## Model Experience
 
-whale-girl is a **dsh bundle plugin** that adds a desktop pet overlay to the GUI. It does not produce model-visible output, consume model input, or modify tool results.
+None, as the bundle adds a desktop pet overlay to the GUI; it produces no model-visible output, consumes no model input, and modifies no tool results.
+
+#### KV Cache effect
+
+None; this package neither assembles nor sends a provider request.
 
 ## Known Limitations and Deferred Work
 
@@ -135,7 +143,3 @@ whale-girl is a **dsh bundle plugin** that adds a desktop pet overlay to the GUI
 - Preview GIFs for each emotion state are not yet included in the repository; they are tracked in a separate assets branch.
 - The `lib/client.js` bundle is built with esbuild and checked into the repository — it should be regenerated after any client-side change (`pnpm build:client`).
 - Adding a new character requires creating sprite sheets at the correct pixel sizes and adding a manifest entry. This is straightforward but not yet automated.
-
-## License
-
-MIT License

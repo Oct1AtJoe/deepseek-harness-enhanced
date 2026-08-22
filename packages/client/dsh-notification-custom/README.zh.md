@@ -53,14 +53,9 @@ Host 侧可调参数在 `cordis.yml` 的插件行上：
     maxBodyChars: 400      # projection body budget; longer replies are ellipsized host-side
 ```
 
-## 对模型的影响
+## License
 
-| 方面 | 效果 |
-| --- | --- |
-| Token 开销 | 无 —— 通知纯属 UI，绝不进入请求。 |
-| 工具调用 | 无 —— 模型没有新增任何工具。 |
-| 会话日志 | 不变 —— 投影只读已有日志，不新增事件。 |
-| 提示词 | 不变 —— 不注册任何 system prompt 段。 |
+MIT
 
 ## 权限边界
 
@@ -76,13 +71,17 @@ pnpm run test:gui        # includes this package's vitest specs
 pnpm --filter @deepseek-ai/dsh-notification-custom bundle
 ```
 
+## 对模型的影响
+
+无。本插件在绑定浏览器的会话投影之上呈现桌面通知；它不注册任何提示词、工具或消息，也不向会话日志写入任何内容。
+
+#### KV Cache 影响
+
+无；该包既不组装也不发送提供方请求。
+
 ## 已知限制
 
 - 通知需要页面处于打开状态（页面在后台时可弹，但关闭标签页后不再弹）。桌面壳下通知走壳子的通知桥，以 Windows toast 呈现。
 - 通知在每轮结束（任意会话的 running→idle 边沿）触发一次；断线期间完成的轮次在重连后不会补发。
 - 规则匹配对象为会话标题 + 最近一轮的回复文本与工具名，不匹配更早的轮次。
 - 通知正文是纯文本摘要；点击通知会聚焦窗口，携带会话 id 时还会在 GUI 里选中该会话（不深链到具体轮次）。
-
-## License
-
-MIT

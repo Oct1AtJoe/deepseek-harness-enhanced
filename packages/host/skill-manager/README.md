@@ -10,11 +10,19 @@ The service is Remote-only and declares no same-process Cordis `Context` merge. 
 
 ## Model Experience
 
-None directly, but the invocation override is model-visible input: it changes which skills the model catalog advertises and loads. The override affects the registry's list and get projections; every catalog injection stays logged by its existing `skill-catalog` session event, so a model-visible change remains reconstructable from the session log.
+### Skill catalog membership
+
+#### What the model sees
+
+This package renders no model text itself: the catalog message is rendered and logged by [`dsh-tool-skill`](../../skill/tool-skill/README.md). What this package changes is the membership input — each `skillManager/setInvocation` write stores a global invocation override that the registry's `list` and `get` projections apply, so a skill whose effective policy is model-invocable appears in the catalog with its `name` and normalized description, and a flip to user-invocable-only retires its entry in the next replacement catalog.
+
+#### Token effect
+
+The override itself adds zero tokens. Its effect travels through the catalog: a flip that moves a skill between model-invocable and user-invocable changes which entries the replacement catalog carries, and that delta is the token cost of the catalog message, owned by `dsh-tool-skill`.
 
 #### KV Cache effect
 
-None; this package assembles no model input of its own.
+No earlier request tokens are rewritten. The changed membership surfaces as an appended replacement catalog after the reusable prefix (owned by `dsh-tool-skill`); this package writes settings, not request context.
 
 ## Known Limitations and Deferred Work
 
