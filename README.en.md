@@ -2,15 +2,15 @@
 
 English | [中文](README.md)
 
-> **Local enhanced fork.** This checkout is official [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) master (snapshot `47f94385`, 2026-08-13) plus local customizations added on 2026-08-14. The feature checklist, replay steps, and merge-conflict guide live in [CUSTOM-FEATURES.md](CUSTOM-FEATURES.md). Remote: https://github.com/Oct1AtJoe/deepseek-harness-enhanced
+> **Local enhanced fork.** This checkout is official [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) master (snapshot `528c682e`, 2026-08-21) plus local customizations added incrementally since 2026-08-14. The feature checklist, replay steps, and merge-conflict guide live in [CUSTOM-FEATURES.md](CUSTOM-FEATURES.md). Remote: https://github.com/Oct1AtJoe/deepseek-harness-enhanced
 
 DeepSeek Harness (`dsh`) is an open-source agent harness developed by [DeepSeek AI](https://deepseek.com).
 
 It uses an architecture where **everything is a plugin**, and is powered by [Cordis](https://github.com/cordiverse/cordis), whose design is described in [_A Programming Paradigm for Spatiotemporal Composability_](https://github.com/cordiverse/paper).
 
-## Local enhancements (2026-08-14)
+## Local enhancements
 
-Custom features on top of official master. Plugin-extracted features merge cleanly on upstream sync; the rest are small in-package changes replayed per [CUSTOM-FEATURES.md](CUSTOM-FEATURES.md):
+Custom features on top of official master (incremental, since 2026-08-14). Plugin-extracted features merge cleanly on upstream sync; the rest are small in-package changes replayed per [CUSTOM-FEATURES.md](CUSTOM-FEATURES.md):
 
 - **Per-model effort memory** — switching models no longer resets the reasoning effort to the adapter default; new sessions inherit the remembered effort.
 - **Failed-round re-run button** — a refresh action on a failed assistant reply re-sends the round's text (`@deepseek-ai/dsh-client-ui-resend-failed-round` plugin).
@@ -19,8 +19,15 @@ Custom features on top of official master. Plugin-extracted features merge clean
 - **Cross-workspace session reference** — `@`-triggered session candidates and injected referenced-session context (`ui-session-reference` plugin).
 - **Produced-files diff stats** — file chips show `+N -M` and expand the round's changes (`@deepseek-ai/dsh-client-ui-deliverables-custom` fork).
 - **aurora / nebula themes** — tech-style themes with glow, plus rounded pixel-style buttons.
-- **Desktop shell** — an Electron wrapper (`desktop/`) that spawns or attaches to `dsh web`.
+- **Desktop shell** — an Electron wrapper (`desktop/`) and a Tauri 2 shell (`desktop-tauri/`) that spawn or attach to `dsh web`; WinRT notifications, external links open in system browser.
 - **Increased LLM retry count** — default max retries raised from 2 to 10 (`DEFAULT_MAX_RETRIES`), improving recovery under high load or transient failures.
+- **Desktop pet kanye-pet** — Tauri 2 desktop pet window with Kanye West character; notification bubbles for DSH session progress, click to focus the main window (`packages/desktop/kanye-pet/` + `ui-kanye-pet` settings card).
+- **Session finish notifications** — browser system toast notifications when a session turn completes, per-outcome toggles, displays session title (`dsh-notification-custom` plugin).
+- **Message navigation rail** — right-edge conversation navigation rail: one dash per user message, reading-position tracking, hover preview card, click-to-jump (`ui-msg-nav` plugin).
+- **Subagent backend manager** — new "Subagents" tab in Web Settings: installed backend directory with install/remove/reconfigure (`host-subagent-manager` + `ui-settings-subagents`).
+- **Skill manager** — new "Skills" tab in Web Settings: browse, inspect, and toggle invocation overrides (`host-skill-manager` + `ui-settings-skills`).
+- **Nebula liquid-glass theme** — full glassmorphism: translucent surfaces with `backdrop-filter` blur, aurora background visible through panels; glassified buttons (drift animation + highlight border + glow).
+- **pi-ai image placeholder** — text-only pi-ai models no longer reject images; renders `[image attachment ...]` placeholders consistent with the deepseek adapter.
 
 ### Syncing upstream
 

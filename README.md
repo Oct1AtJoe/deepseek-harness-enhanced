@@ -2,15 +2,15 @@
 
 [English](README.en.md) | 中文
 
-> **本地增强分支。** 本检出为官方 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) master（快照 `47f94385`，2026-08-13）叠加 2026-08-14 加入的本地定制。功能清单、重放步骤与合并冲突指引见 [CUSTOM-FEATURES.md](CUSTOM-FEATURES.md)。远程仓库：https://github.com/Oct1AtJoe/deepseek-harness-enhanced
+> **本地增强分支。** 本检出为官方 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) master（快照 `528c682e`，2026-08-21）叠加本地定制（始于 2026-08-14，持续增量更新）。功能清单、重放步骤与合并冲突指引见 [CUSTOM-FEATURES.md](CUSTOM-FEATURES.md)。远程仓库：https://github.com/Oct1AtJoe/deepseek-harness-enhanced
 
 DeepSeek Harness（`dsh`）是由 [DeepSeek AI](https://deepseek.com) 开发的开源 agent harness（智能体框架）。
 
 它采用**一切皆插件**的架构，并由 [Cordis](https://github.com/cordiverse/cordis) 驱动，其设计参见论文 [_A Programming Paradigm for Spatiotemporal Composability_](https://github.com/cordiverse/paper)。
 
-## 本地增强（2026-08-14）
+## 本地增强
 
-在官方 master 之上的定制功能。已插件化的功能在上游同步时零冲突；其余为包内小改动，按 [CUSTOM-FEATURES.md](CUSTOM-FEATURES.md) 重放：
+在官方 master 之上的定制功能（持续增量，始于 2026-08-14）。已插件化的功能在上游同步时零冲突；其余为包内小改动，按 [CUSTOM-FEATURES.md](CUSTOM-FEATURES.md) 重放：
 
 - **per-model 思考程度记忆** — 切换模型不再把思考程度重置为适配器默认；新会话继承记忆。
 - **失败轮重发按钮** — 失败的助手回复旁新增刷新动作，一键重发该轮文本（`@deepseek-ai/dsh-client-ui-resend-failed-round` 插件）。
@@ -19,8 +19,15 @@ DeepSeek Harness（`dsh`）是由 [DeepSeek AI](https://deepseek.com) 开发的�
 - **跨工作区会话引用** — `@` 触发会话候选与注入的引用会话上下文（`ui-session-reference` 插件）。
 - **产物文件 diff 统计** — 文件 chip 显示 `+N -M` 并可展开本轮改动（`@deepseek-ai/dsh-client-ui-deliverables-custom` fork）。
 - **aurora / nebula 主题** — 带光晕的科技风主题与圆角像素风按钮。
-- **桌面壳** — Electron 封装（`desktop/`），启动或挂接 `dsh web`。
+- **桌面壳** — Electron 封装（`desktop/`）与 Tauri 2 壳（`desktop-tauri/`），启动或挂接 `dsh web`；支持 WinRT 通知、外部链接系统浏览器打开。
 - **LLM 重试次数提升** — 默认最大重试次数从 2 次提升到 10 次（`DEFAULT_MAX_RETRIES`），提高在高负载或瞬时故障下的恢复成功率。
+- **桌面宠物 kanye-pet** — Tauri 2 桌面宠物窗口，Kanye West 角色，通知气泡感知 DSH 会话进度，点击切回主窗口（`packages/desktop/kanye-pet/` + `ui-kanye-pet` 设置面板）。
+- **会话完成通知** — 浏览器系统 toast 通知：每轮会话完成弹出，按结果类型开关，显示会话标题（`dsh-notification-custom` 插件）。
+- **消息导航轨** — 对话右侧导航轨，每条用户消息对应竖线标记，跟踪阅读位置，悬停预览卡片，点击跳转（`ui-msg-nav` 插件）。
+- **子智能体后台管理** — Web 设置新增"子智能体"tab：已安装后台目录，支持安装/删除/重配（`host-subagent-manager` + `ui-settings-subagents`）。
+- **技能管理** — Web 设置新增"技能"tab：浏览、查看详情、开关调用覆写（`host-skill-manager` + `ui-settings-skills`）。
+- **Nebula 液态玻璃主题** — 星云主题全面磨砂玻璃效果：半透明表面 + `backdrop-filter` 模糊，极光底图透过面板；按钮玻璃化（漂移动画+高光描边）。
+- **pi-ai 图片占位符** — 文本模态 pi-ai 模型发图不再抛错，转为文本占位符 `[image attachment ...]`，与 deepseek 适配器一致。
 
 ### 同步上游
 
@@ -58,6 +65,8 @@ pnpm install
 pnpm run build
 pnpm dsh web
 ```
+
+`pnpm run build` 会准备仓库构建产物。`pnpm dsh web` 使用已构建的产物，无需重复构建。
 
 ## 社区与支持
 
