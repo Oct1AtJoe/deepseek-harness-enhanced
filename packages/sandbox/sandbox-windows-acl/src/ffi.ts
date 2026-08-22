@@ -112,6 +112,8 @@ export interface Win32Bindings {
     currentDirectory: string | null, startupInfo: NativePtr, processInfo: NativePtr,
   ): number
   setEnvironmentVariableW(name: string, value: string): number
+  /** SetErrorMode: control per-process error-reporting behavior (e.g. SEM_NOGPFAULTERRORBOX to suppress crash dialogs). */
+  setErrorMode(mode: number): number
   readFile(file: NativePtr, buffer: Buffer, count: number, bytesRead: NativePtr, overlapped: null): number
   peekNamedPipe(
     pipe: NativePtr, buffer: null, size: number,
@@ -416,6 +418,7 @@ function bindings(): Win32Bindings {
       koffi.pointer(STARTUPINFOW), koffi.pointer(PROCESS_INFORMATION),
     ]),
     setEnvironmentVariableW: bind(kernel32, 'SetEnvironmentVariableW', 'int', ['str16', 'str16']),
+    setErrorMode: bind(kernel32, 'SetErrorMode', 'uint32', ['uint32']),
     readFile: bind(kernel32, 'ReadFile', 'int', [PVOID, PVOID, 'uint32', koffi.pointer('uint32'), PVOID]),
     peekNamedPipe: bind(kernel32, 'PeekNamedPipe', 'int', [PVOID, PVOID, 'uint32', koffi.pointer('uint32'), koffi.pointer('uint32'), koffi.pointer('uint32')]),
     waitForSingleObject: bind(kernel32, 'WaitForSingleObject', 'uint32', [PVOID, 'uint32']),

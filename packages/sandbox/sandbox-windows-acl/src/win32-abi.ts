@@ -149,6 +149,10 @@ export const MAX_PATH = 260
 // assign it to the kill-on-close job before any of its code runs.
 /** CREATE_SUSPENDED: create the child with its primary thread suspended until ResumeThread. */
 export const CREATE_SUSPENDED = 0x4
+/** CREATE_DEFAULT_ERROR_MODE: the child inherits the caller's error-mode preference (SetErrorMode), preventing Windows Error Reporting dialogs for failures under the restricted token. */
+export const CREATE_DEFAULT_ERROR_MODE = 0x04000000
+/** SEM_NOGPFAULTERRORBOX: suppress the Windows "Application Error" / "has stopped working" dialog for this process and its children (when CREATE_DEFAULT_ERROR_MODE is passed). */
+export const SEM_NOGPFAULTERRORBOX = 0x0002
 // winbase.h lines ~497-499: GetStdHandle selectors.
 /** STD_INPUT_HANDLE: GetStdHandle selector for the standard input. */
 export const STD_INPUT_HANDLE = -10
