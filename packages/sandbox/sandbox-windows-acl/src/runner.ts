@@ -48,6 +48,7 @@ import { existsSync, mkdtempSync, rmSync, statSync } from 'node:fs'
 import { join } from 'node:path'
 
 import { win32 } from './ffi.ts'
+import * as abi from './win32-abi.ts'
 import { AclSandbox, assertTempRootOutsideWorkspace } from './index.ts'
 import { tempWriteSid, workspaceWriteSid } from './workspace-sid.ts'
 
@@ -131,6 +132,9 @@ async function main(): Promise<number> {
   }
 
   const api = await win32()
+  // Suppress Windows "Application Error" dialogs for spawn failures under the
+  // restricted token. The child inherits this error mode via CREATE_DEFAULT_ERROR_MODE.
+  api.setErrorMode(abi.SEM_NOGPFAULTERRORBOX)
   // Ignore this process's own CTRL+C: the confined child (same console) keeps
   // handling its own; the runner must survive to revoke grants and mirror the
   // child's exit code.
