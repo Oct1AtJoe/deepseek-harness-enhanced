@@ -61,15 +61,15 @@ export function generate({ check = false, root = ROOT } = {}) {
       '--target=es2020',
       `--outfile=${tmpOut}`,
     ],
-    { cwd: root, encoding: 'utf8' },
+    { cwd: root, encoding: 'utf8', shell: true },
   )
-  if (res.status !== 0) {
-    return { ok: false, errors: [`esbuild 失败：${res.stderr.trim()}`] }
+  if (res.status !== 0 || res.error !== undefined) {
+    return { ok: false, errors: [`esbuild 失败：${String(res.error ?? res.stderr?.trim())}`] }
   }
   const body = readFileSync(tmpOut, 'utf8')
   const code = Buffer.from(
     `window.__ModuleLoader__.load({\n`
-    + `\tid: "kanye-pet",\n`
+    + `\tid: ${JSON.stringify(JSON.parse(readFileSync(join(root, 'package.json'), 'utf8')).name)},\n`
     + `\tfactory: (require) => {\n`
     + `\t\tvar module = { exports: {} };\n`
     + `\t\tvar exports = module.exports;\n`

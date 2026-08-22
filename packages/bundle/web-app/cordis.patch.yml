@@ -128,7 +128,7 @@
     # Built-in desktop pet (kanye-pet): Node half serves
     # state/assets/config/SSE for the Tauri desktop pet window.
     - id: kanye-pet
-      name: kanye-pet
+      name: '@deepseek-ai/dsh-kanye-pet'
 
 
     # Web glue owned by this bundle: resolves the built frontend dist (an
