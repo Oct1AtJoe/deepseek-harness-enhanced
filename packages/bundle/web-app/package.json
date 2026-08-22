@@ -85,6 +85,7 @@
     "@deepseek-ai/dsh-client-ui-workflow-run": "workspace:^",
     "@deepseek-ai/dsh-client-ui-trajectory": "workspace:^",
     "@deepseek-ai/dsh-client-ui-workspace": "workspace:^",
+    "@deepseek-ai/dsh-client-ui-msg-nav": "workspace:^",
     "@deepseek-ai/dsh-client-ui-kanye-pet": "workspace:^",
     "@deepseek-ai/dsh-kanye-pet": "workspace:^",
     "@deepseek-ai/dsh-cmdline": "workspace:^",
