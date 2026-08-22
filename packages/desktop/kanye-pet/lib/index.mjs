@@ -173,6 +173,44 @@ export function apply(ctx) {
       return null
     }
   }
+  // ---- 通知辅助（标题映射 + 设通知 + 广播）----
+  /** turn/end reason kind → 通知标题 */
+  const TITLE_MAP = {
+    completed: '任务完成',
+    error: '任务出错',
+    aborted: '任务中止',
+    interrupted: '任务中止',
+    blocked: '等待你的操作',
+    'max-tokens': 'Token 已超限',
+  }
+  /** pending interaction kind → 通知标题 */
+  const PENDING_TITLE_MAP = {
+    question: '需要你的选择',
+    'plan-review': '请评审计划',
+    approval: '等待你的审批',
+  }
+  /**
+   * 设通知并广播。reasonOrPending 优先查 TITLE_MAP，再查 PENDING_TITLE_MAP，
+   * 都不命中则用 '任务完成' 兜底。
+   * @param {string} id session id
+   * @param {string} reasonOrPending turn/end reason kind 或 pending interaction kind
+   * @param {object} session 会话对象（取标题用）
+   * @param {string} [tagPrefix='notif'] 通知 tag 前缀
+   */
+  const setPetNotification = (id, reasonOrPending, session, tagPrefix = 'notif') => {
+    const title = TITLE_MAP[reasonOrPending] ?? PENDING_TITLE_MAP[reasonOrPending] ?? '任务完成'
+    const body = resolveSessionTitle(session) ?? (typeof session?.label === 'string' ? session.label : null) ?? id
+    petNotification = {
+      tag: `${tagPrefix}-${id}-${Date.now()}`,
+      title,
+      body,
+      sessionId: id,
+      reason: reasonOrPending,
+      expiresAt: Date.now() + NOTIFY_TTL_MS,
+    }
+    console.log(`[kanye-pet] notify ${id}: "${title}"`)
+    broadcastEvent()
+  }
   const sessionUpdate = () => {
     // 从当前会话列表与 turn 边沿聚合（sessions 服务缺席时保持上次值——宠物照常跑）
   if (sessionsSvc === undefined || typeof sessionsSvc.list !== 'function') return
@@ -351,25 +389,25 @@ export function apply(ctx) {
             const lastSeq = lastTurnEndNotif.get(id) ?? -1
             for (const e of events) {
               if (e?.type === 'turn/end' && e?.data?.turn != null && (e.seq ?? 0) > lastSeq) {
-                const turn = e.data.turn
                 const reason = e.data.reason?.kind ?? 'completed'
-                const title = reason === 'completed' ? '任务完成'
-                  : reason === 'error' ? '任务出错'
-                  : reason === 'aborted' || reason === 'interrupted' ? '任务中止'
-                  : '任务完成'
-                const body = resolveSessionTitle(session) ?? (typeof session?.label === 'string' ? session.label : null) ?? id
-                petNotification = {
-                  tag: `turn-${turn}-${id}-${Date.now()}`,
-                  title,
-                  body,
-                  sessionId: id,
-                  expiresAt: Date.now() + NOTIFY_TTL_MS,
-                }
-                console.log(`[kanye-pet] turn/end ${turn} ${reason} for ${id}: "${title}"`)
-                broadcastEvent()
+                setPetNotification(id, reason, session, `turn-${e.data.turn}`)
                 lastTurnEndNotif.set(id, e.seq)
               }
             }
+          }
+        }
+        // ---- 检测 pending interaction 事件（这些不产生 turn/end blocked）----
+        if (configRef.desktopPetEnabled !== false) {
+          // 审批请求（工具扩权等）
+          if (event?.type === 'approval/asked') {
+            setPetNotification(id, 'approval', session, 'approval')
+          }
+          // ask_user_question / exit_plan_mode（已有快速路径）
+          const toolName = event?.data?.name
+          if (toolName === 'ask_user_question') {
+            setPetNotification(id, 'question', session, 'ask')
+          } else if (toolName === 'exit_plan_mode') {
+            setPetNotification(id, 'plan-review', session, 'review')
           }
         }
         const parsed = parseTurnEvent(event)
@@ -409,11 +447,42 @@ export function apply(ctx) {
               console.log(`[kanye-pet] /state: petNotification expired, clearing`)
               petNotification = null
             }
+            // ---- 调试：打印当前状态 ----
+            console.log(`[kanye-pet] DEBUG /state: desktopPetEnabled=${configRef.desktopPetEnabled}, petNotification=${petNotification !== null ? petNotification.title : 'null'}, sessionsSvc=${typeof sessionsSvc?.list}`)
+            // ---- 轮询兜底：扫描所有会话中未通知的 blocked turn/end ----
+            if (petNotification === null && configRef.desktopPetEnabled !== false
+              && sessionsSvc !== undefined && typeof sessionsSvc.list === 'function') {
+              try {
+                for (const s of sessionsSvc.list()) {
+                  if (s === null || typeof s !== 'object') continue
+                  const sid = typeof s.id === 'string' ? s.id : null
+                  if (sid === null) continue
+                  const events = typeof s.events?.slice === 'function' ? s.events : []
+                  let lastTurnEnd = null
+                  for (const e of events) {
+                    if (e?.type === 'turn/end' && e?.data?.turn != null) lastTurnEnd = e
+                  }
+                  if (lastTurnEnd !== null) {
+                    const lastNotifSeq = lastTurnEndNotif.get(sid) ?? -1
+                    if ((lastTurnEnd.seq ?? 0) > lastNotifSeq) {
+                      const reason = lastTurnEnd.data.reason?.kind ?? 'completed'
+                      if (reason === 'blocked') {
+                        setPetNotification(sid, 'blocked', s, 'poll-blocked')
+                        lastTurnEndNotif.set(sid, lastTurnEnd.seq)
+                      }
+                    }
+                  }
+                }
+              } catch {
+                // 扫描失败不阻塞 state 响应
+              }
+            }
             const notifPayload = petNotification === null ? null : {
               tag: petNotification.tag,
               title: petNotification.title,
               body: petNotification.body,
               sessionId: petNotification.sessionId,
+              reason: petNotification.reason,
             }
             json(res, 200, {
               apiVersion: SNAPSHOT_API_VERSION,
@@ -422,6 +491,12 @@ export function apply(ctx) {
               notification: notifPayload,
               configRevision,
               companionOnline: companionOnline(companionUntil, Date.now()),
+              _debug: {
+                desktopPetEnabled: configRef.desktopPetEnabled,
+                hasNotification: petNotification !== null,
+                notifTitle: petNotification?.title ?? null,
+                sessionsSvc: typeof sessionsSvc?.list === 'function' ? 'available' : 'unavailable',
+              },
             }, { 'cache-control': 'no-store' })
           } catch (error) {
             json(res, 500, { error: error instanceof Error ? error.message : String(error) })

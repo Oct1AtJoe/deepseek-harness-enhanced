@@ -3,6 +3,7 @@ const DSH_BASE = 'http://127.0.0.1:3080';
 const CONFIG_URL = `${DSH_BASE}/kanye-pet/config`;
 const STATE_URL = `${DSH_BASE}/kanye-pet/state`;
 const ASSETS = `${DSH_BASE}/kanye-pet/assets`;
+const SOUNDS_BASE = `${ASSETS}/sounds`;
 const MANIFEST_URL = `${ASSETS}/manifest.json`;
 const POLL_MS = 2000;
 
@@ -128,9 +129,106 @@ function setupDrag() {
 }
 
 // ---- 气泡通知 ----
+// 通知类型 → 音效文件名映射
+var REASON_SOUND = {
+  question: 'pending',
+  'plan-review': 'pending',
+  approval: 'pending',
+  completed: 'complete',
+  error: 'error',
+  aborted: 'notify',
+  interrupted: 'notify',
+  'max-tokens': 'notify',
+  blocked: 'pending',
+}
+
+// Web Audio API 上下文（懒初始化）
+var audioCtx = null
+function getAudioCtx() {
+  if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)()
+  return audioCtx
+}
+
+function playTone(ctx, freq, start, vol, dur) {
+  var osc = ctx.createOscillator()
+  var gain = ctx.createGain()
+  osc.type = 'sine'
+  osc.frequency.value = freq
+  gain.gain.setValueAtTime(0, start)
+  gain.gain.linearRampToValueAtTime(vol, start + 0.01)
+  gain.gain.linearRampToValueAtTime(0, start + dur)
+  osc.connect(gain); gain.connect(ctx.destination)
+  osc.start(start); osc.stop(start + dur + 0.01)
+}
+
+function playSweep(ctx, f0, f1, start, vol, dur) {
+  var osc = ctx.createOscillator()
+  var gain = ctx.createGain()
+  osc.type = 'sawtooth'
+  osc.frequency.setValueAtTime(f0, start)
+  osc.frequency.linearRampToValueAtTime(f1, start + dur)
+  gain.gain.setValueAtTime(0, start)
+  gain.gain.linearRampToValueAtTime(vol, start + 0.01)
+  gain.gain.linearRampToValueAtTime(0, start + dur)
+  osc.connect(gain); gain.connect(ctx.destination)
+  osc.start(start); osc.stop(start + dur + 0.01)
+}
+
+function playComplete(ctx) {
+  var now = ctx.currentTime
+  playTone(ctx, 523, now, 0.12, 0.15)   // C5
+  playTone(ctx, 659, now + 0.14, 0.12, 0.2)  // E5
+}
+
+function playPending(ctx) {
+  playTone(ctx, 440, ctx.currentTime, 0.15, 0.25)  // A4 soft chime
+}
+
+function playError(ctx) {
+  playSweep(ctx, 200, 100, ctx.currentTime, 0.2, 0.35)  // descending buzz
+}
+
+function playNotify(ctx) {
+  playTone(ctx, 660, ctx.currentTime, 0.05, 0.1)  // short pip
+}
+
+/** 播通知音效：优先加载自定义 wav，失败则 Web Audio 合成 */
+function playNotifSound(reason) {
+  try {
+    var name = REASON_SOUND[reason] || 'notify'
+    var url = SOUNDS_BASE + '/' + name + '.wav'
+    var req = new XMLHttpRequest()
+    req.open('HEAD', url, true)
+    req.onload = function() {
+      if (req.status === 200) {
+        var audio = new Audio(url)
+        audio.volume = 0.3
+        audio.play().catch(function() { playSynth(reason) })
+      } else {
+        playSynth(reason)
+      }
+    }
+    req.onerror = function() { playSynth(reason) }
+    req.send()
+  } catch(e) { playSynth(reason) }
+}
+
+function playSynth(reason) {
+  try {
+    var ctx = getAudioCtx()
+    switch (REASON_SOUND[reason] || 'notify') {
+      case 'complete': playComplete(ctx); break
+      case 'pending': playPending(ctx); break
+      case 'error': playError(ctx); break
+      default: playNotify(ctx); break
+    }
+  } catch(e) {}
+}
+
 function showBubble(n) {
   if (!n || n.tag === lastNotifTag) { console.log('[pet] showBubble skip: n=', !!n, 'tagRepeat=', n?.tag === lastNotifTag, 'lastTag=', lastNotifTag); return }
-  console.log('[pet] showBubble SHOW:', n.title, n.body, 'tag=', n.tag)
+  console.log('[pet] showBubble SHOW:', n.title, n.body, 'tag=', n.tag, 'reason=', n.reason)
+  playNotifSound(n.reason)
   lastNotifTag = n.tag
   currentNotif = n
   if (!bubbleEl) {
@@ -140,9 +238,13 @@ function showBubble(n) {
     document.body.appendChild(bubbleEl)
     bubbleEl.addEventListener('click', () => {
       if (!currentNotif) return
+      clearTimeout(bubbleTimer)
+      bubbleEl.style.display = 'none'
+      const sessionId = currentNotif.sessionId
+      currentNotif = null
       const invoke = window.__TAURI_INTERNALS__?.invoke
       if (typeof invoke === 'function') {
-        invoke('pet_open_session', { sessionId: currentNotif.sessionId }).catch(() => {})
+        invoke('pet_open_session', { sessionId }).catch(() => {})
       }
     })
   }

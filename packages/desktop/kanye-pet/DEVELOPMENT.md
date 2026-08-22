@@ -394,14 +394,13 @@ if (!lastTurnEndNotif.has(id)) {
 ```
 new Notification(...)
   → ShimNotification 构造器
-  → tag 含 '-pending-'（审批/提问类）→ bridge.fire()（永远走 Windows）
   → fetch /kanye-pet/config 查 desktopPetEnabled
   → desktopPetEnabled === false → bridge.fire()（Windows 通知）
-  → desktopPetEnabled !== false → 直接抑制（由 kanye-pet turn 检测驱动气泡）
+  → desktopPetEnabled !== false → 直接抑制（由 kanye-pet turn 检测/轮询驱动气泡）
   → fetch 失败 → bridge.fire()（兜底 Windows）
 ```
 
-> **注意**：桌面宠物窗口（pet.html/pet.js）没有注入 ShimNotification，只有主窗口（main）注入了。ShimNotification 的作用是把浏览器里 dsh-notification-custom 发起的 `new Notification()` 转成 Windows Toast；桌宠启用时改由 kanye-pet 气泡接管。
+> **注意**：桌面宠物窗口（pet.html/pet.js）没有注入 ShimNotification，只有主窗口（main）注入了。ShimNotification 的作用是把浏览器里 dsh-notification-custom 发起的 `new Notification()` 转成 Windows Toast；桌宠启用时统一由 kanye-pet 气泡接管，不再区分 pending 与非 pending。
 
 ### 5.4 通知链路细节
 
@@ -410,7 +409,7 @@ new Notification(...)
 | 通知队列 | 单槽 `petNotification`（最新覆盖旧），60s TTL 防残留 |
 | tag 去重 | pet.js `lastNotifTag` 防轮询重复显示 |
 | 气泡时长 | 8s 自动消失 |
-| 点击跳转 | `pet_open_session`(Tauri command) → `show_main` + `open_session` → eval `dsh:open-session` CustomEvent → dsh-notification-custom 监听 `sessions.open(id)` |
+| 点击跳转 | `pet_open_session`(Tauri command) → `show_main` + `open_session` → eval `dsh:open-session` CustomEvent → dsh-notification-custom 监听 `sessions.open(id)`；点击后气泡立即消失 |
 | 会话标题兜底链 | `resolveSessionTitle` → `session.label` → `session.id`（启动初期标题未就绪时兜底） |
 | 延迟 | turn/end 写入 log 后，下一条 session/event 到来时检测（通常毫秒级） |
 
@@ -421,6 +420,86 @@ new Notification(...)
 | v1 | `onJobDone` | 只覆盖子进程 job，纯对话 turn 不触发 |
 | v2 | `assistant/message` | 频次太高：命令结果、子智能体都发 |
 | v3（终版） | 扫描 `session.events` 的 turn/end | 与 dsh-notification-custom 同源，一次 turn 一条 |
+
+### 5.6 通知系统架构（v4 终版）
+
+kanye-pet 的通知系统通过三个检测路径覆盖所有需要通知用户的场景：
+
+#### 5.6.1 三条检测路径
+
+| 路径 | 触发事件 | 覆盖场景 | 延迟 |
+|------|---------|---------|------|
+| **turn/end 扫描** | `session/event` 回调时扫描 `session.events` | 所有 turn/end（completed/error/aborted/interrupted/max-tokens） | 下一事件到达时 |
+| **approval/asked 检测** | `session/event` 回调中 `event.type === 'approval/asked'` | 工具审批（sandbox_permissions 等） | 即时 |
+| **tool/call 快速路径** | `session/event` 回调中 `event.data.name` 匹配 | `ask_user_question` / `exit_plan_mode` | 即时 |
+
+#### 5.6.2 标题映射
+
+```javascript
+// turn/end reason kind → 通知标题（TITLE_MAP）
+completed  → 任务完成
+error      → 任务出错
+aborted    → 任务中止
+interrupted→ 任务中止
+blocked    → 等待你的操作    // 注：实际不产生 turn/end blocked
+max-tokens → Token 已超限
+
+// pending interaction kind → 通知标题（PENDING_TITLE_MAP）
+question    → 需要你的选择    // ask_user_question
+plan-review → 请评审计划      // exit_plan_mode
+approval    → 等待你的审批    // approval/asked 事件
+```
+
+#### 5.6.3 单槽队列
+
+`petNotification` 是单槽变量，每次设通知覆盖上一条。TTL 60s，超时后 `/state` 端点自动清除。
+
+#### 5.6.4 点击消失
+
+`pet.js` 的 `showBubble` 创建的气泡点击后立即隐藏并清除定时器（`clearTimeout` + `display: none`），同时调用 `pet_open_session` 跳转会话。
+
+#### 5.6.5 关键坑点
+
+- **工具审批不产生 turn/end blocked**：审批等待时 turn 保持 OPEN，批准后直接 `completed`。必须靠 `approval/asked` 事件检测
+- **`ask_user_question` / `exit_plan_mode` 不产生 turn/end**：工具 async 等待用户回答，turn 不结束。必须靠 tool/call 快速路径
+- **ShimNotification 对 pending 标签的特判**：原逻辑对 `-pending-` 标签通知永远走 Windows，与 pet 气泡重复。改为统一查 `desktopPetEnabled`（见 5.3）
+
+### 5.7 通知提示音
+
+kanye-pet 支持通知音效，默认为 Web Audio API 合成音，可通过自定义 wav 文件覆盖。
+
+#### 5.7.1 音效映射
+
+| 通知类型（reason） | 合成音效 | 自定义文件名 |
+|-------------------|---------|------------|
+| `completed` | C5→E5 上行双音「叮叮」 | `complete.wav` |
+| `question` / `plan-review` / `approval`（pending 类） | A4 柔和单音「叮」 | `pending.wav` |
+| `error` | 200→100Hz 锯齿波下坠「嗡」 | `error.wav` |
+| 其他兜底 | 660Hz 短促「啵」 | `notify.wav` |
+
+#### 5.7.2 自定义音效
+
+在 `kanye-pet/lib/assets/sounds/` 放置对应文件名的 `.wav` 文件，pet.js 自动优先加载：
+
+```
+lib/assets/sounds/
+├── complete.wav     # 任务完成
+├── pending.wav      # 审批/提问/评审
+├── error.wav        # 任务出错
+└── notify.wav       # 兜底
+```
+
+pet.js 通过 `HEAD /kanye-pet/assets/sounds/<name>.wav` 检查文件是否存在，存在则用 `new Audio(url)` 播放，不存在则回退到 Web Audio API 合成。
+
+**不需重编 exe**，放好文件重启 DSH 即可。
+
+#### 5.7.3 实现细节
+
+- 音效播放位于 `desktop-tauri/src/pet.js` 的 `playNotifSound(reason)` 函数
+- 服务器 `/state` 端点返回的 `notification` 对象包含 `reason` 字段（如 `'completed'`、`'question'`、`'approval'`），pet.js 据此选择音效
+- Web Audio API 上下文懒初始化（首次播放时才创建 `AudioContext`）
+- 合成音改用 `OscillatorNode` + `GainNode` 实现，带缓起缓落防爆音
+- 自定义 wav 播放音量固定 0.3
 
 ---
 
@@ -515,7 +594,7 @@ Remove-Item "$env:LOCALAPPDATA\ai.deepseek.harness.desktop\EBWebView" -Recurse -
 | 16 | Tauri 打开了但桌宠窗口空白 | pet window 需要 `capabilities.default.json` 的 `windows` 数组包含 `"pet"`；缺此权限所有 IPC 均不可用 |
 | 17 | ⚠️ 改 pet.js/pet.html 后重编 exe 不生效 | Tauri build script 只跟踪 frontendDist 目录本身，不跟踪文件内容。删 `target/release/build/dsh-desktop-*` 或整个 target 重编（见 6.3） |
 | 18 | 点击气泡无反应 | 确认 `pet_open_session` 命令已注册（`invoke_handler`）；pet.js 里 invoke 参数名 `sessionId` 与 Rust 命令参数 `session_id` 的 serde 转换（Tauri 自动 camelCase，`session_id` ↔ `sessionId` 正确） |
-| 19 | Windows 通知仍弹（桌宠启用时） | 确认 ShimNotification 走对分支：`desktopPetEnabled === false` 才 fire；fetch 失败兜底 fire。另注意 `task_notifier_script` 必须走 `new Notification()` 而非直呼 `bridge.fire()`（绕过 shim） |
+| 19 | Windows 通知仍弹（桌宠启用时） | 确认 ShimNotification 走对分支：只有 `desktopPetEnabled === false` / fetch 失败才 fire。所有通知（含 pending）统一查桌宠开关。另注意 `task_notifier_script` 必须走 `new Notification()` 而非直呼 `bridge.fire()`（绕过 shim） |
 | 20 | 气泡被窗口裁剪 | 气泡必须放在窗口可视区域内（`bottom: 6px`），`bottom: calc(100% - 6px)` 会把气泡推到窗口外被裁掉 |
 | 21 | 气泡标题和正文挤在一行 | pet.js `showBubble()` 里 `display: 'block'` 会覆盖 CSS 的 `display: flex; flex-direction: column`。必须用 `display: 'flex'` |
 | 22 | 气泡底部透明蒙版 | `box-shadow` 在透明窗口内形成半透明渐变带。去掉 box-shadow、用纯色背景+实色边框 |
@@ -528,6 +607,9 @@ Remove-Item "$env:LOCALAPPDATA\ai.deepseek.harness.desktop\EBWebView" -Recurse -
 | 29 | 精灵图角色显示很小 | 精灵图每帧透明 padding 过多（见 3.6，待解决） |
 | 30 | PowerShell 测 curl JSON 报 invalid JSON | `Set-Content -Encoding UTF8` 会加 BOM 导致 `JSON.parse` 失败；单引号包裹的 JSON 也会被 PowerShell 转义破坏。用 `[System.IO.File]::WriteAllText(..., [UTF8Encoding]::new($false))` 写无 BOM 文件 + `curl --data-binary "@file"` |
 | 31 | 会话标题未就绪显示"未命名会话" | 启动初期 `resolveSessionTitle` 返回 null。兜底链：`resolveSessionTitle` → `session.label` → `session.id` |
+| 32 | ⚠️ 工具审批通知两头空（无气泡、无 Windows） | 工具审批**不产生 turn/end blocked**（turn 保持 OPEN）。不能靠 turn/end 扫描，必须检测 `approval/asked` 事件（§5.6.1） |
+| 33 | ⚠️ ask_user_question / exit_plan_mode 无通知 | 工具 async 等待时 turn 不结束，不产生 turn/end。必须靠 `tool/call` 快速路径（§5.6.1） |
+| 34 | ⚠️ pending 通知与 Windows toast 重复 | ShimNotification 原逻辑对 `-pending-` 标签永远走 Windows。改 pending 通知也查 `desktopPetEnabled`（§5.3） |
 
 ---
 
@@ -624,6 +706,8 @@ dbg.textContent = 'debug info'
 1. **Tauri 前端资源打包有缓存**，改 pet.js/pet.html 必须删 build 产物重编（见 6.3），否则白改
 2. **会话事件有两套通道**：`session/event` 广播（部分事件）与 `session.events` 完整日志。turn/start/turn/end 只在日志里，要轮询/扫描日志才能感知
 3. **通知语义要对齐 dsh-notification-custom**：它按 turn 投影推进触发，一次 turn 一条；不要用 onJobDone（只覆盖 job）或 assistant/message（太频繁）
-4. **透明窗口的视觉坑**：box-shadow、半透明背景、窗口外定位都会产生诡异视觉效果，气泡用纯色 + 窗口内定位
-5. **host 端改动（lib/index.mjs）无需重编 exe**，重启 DSH 即生效；pet.js/pet.html/lib.rs 改动必须重编 exe
-6. **验证 exe 是否包含新前端代码**：解压 `target/release/build/dsh-desktop-*/out/tauri-codegen-assets/*.js`（Brotli 压缩），检查内容 hash 是否变化或直接解压比对
+4. **三条通知检测路径缺一不可**：turn/end 扫描覆盖正常完成；`approval/asked` 覆盖工具审批；`tool/call` 快速路径覆盖 `ask_user_question`/`exit_plan_mode`。工具审批不产生 `turn/end blocked`，`ask_user_question` 不产生任何 turn/end（§5.6.1）
+5. **ShimNotification 的 pending 特判**：原逻辑对 pending 标签永远走 Windows，与 pet 气泡重复。统一查 `desktopPetEnabled` 后，所有通知由 pet 气泡接管（§5.3）
+6. **透明窗口的视觉坑**：box-shadow、半透明背景、窗口外定位都会产生诡异视觉效果，气泡用纯色 + 窗口内定位
+7. **host 端改动（lib/index.mjs）无需重编 exe**，重启 DSH 即生效；pet.js/pet.html/lib.rs 改动必须重编 exe
+8. **验证 exe 是否包含新前端代码**：解压 `target/release/build/dsh-desktop-*/out/tauri-codegen-assets/*.js`（Brotli 压缩），检查内容 hash 是否变化或直接解压比对
