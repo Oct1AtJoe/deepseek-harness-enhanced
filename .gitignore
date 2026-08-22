@@ -18,6 +18,7 @@ coverage/
 oxlint-contract-*.ts
 .humanize/
 tmp/
+packages/data/kanye-pet/state.json
 .claude/commands/
 .claude/launch.json
 .claude/settings.json
