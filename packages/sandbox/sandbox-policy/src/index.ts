@@ -18,6 +18,7 @@
  * @module @deepseek-ai/dsh-sandbox-policy
  */
 
+import { spawnSync } from 'node:child_process'
 import { resolve as resolvePath } from 'node:path'
 import { Context, Service } from '@deepseek-ai/cordis'
 import z from '@deepseek-ai/schemastery'
@@ -108,6 +109,49 @@ export class SandboxPolicyService extends Service {
     // the process cwd is real branching, resolved absolute either way.
     this.defaultMode = config.mode as SandboxMode
     this.workspaceRoot = resolveWorkspaceRoot(config.workspaceRoot ?? process.cwd())
+
+    // On Windows, suppress Windows Error Reporting (WER) dialogs for this
+    // user's entire process tree. WER flags (WerSetFlags) are per-process and
+    // do not propagate to child processes, so the CRT-only SEM_NOGPFAULTERRORBOX
+    // (set in the ACL runner) cannot suppress WER dialogs for grandchildren.
+    // The registry approach suppresses every WER crash dialog for the session.
+    ctx.effect(() => {
+      if (process.platform !== 'win32') return () => {}
+      let previousRs: string | undefined
+      try {
+        const current = spawnSync('reg', [
+          'query', 'HKCU\\Software\\Microsoft\\Windows\\Windows Error Reporting',
+          '/v', 'DontShowUI',
+        ], { stdio: 'pipe', encoding: 'utf8', timeout: 3000 })
+        if (current.status === 0 && current.stdout !== null) {
+          const match = /DontShowUI\s+REG_DWORD\s+(0x[0-9a-fA-F]+)/u.exec(current.stdout)
+          if (match !== null) previousRs = match[1]
+        }
+        spawnSync('reg', [
+          'add', 'HKCU\\Software\\Microsoft\\Windows\\Windows Error Reporting',
+          '/v', 'DontShowUI', '/t', 'REG_DWORD', '/d', '1', '/f',
+        ], { stdio: 'ignore', timeout: 3000 })
+      } catch {
+        // Best-effort: registry read/write failure is non-fatal.
+      }
+      return () => {
+        try {
+          if (previousRs !== undefined) {
+            spawnSync('reg', [
+              'add', 'HKCU\\Software\\Microsoft\\Windows\\Windows Error Reporting',
+              '/v', 'DontShowUI', '/t', 'REG_DWORD', '/d', previousRs, '/f',
+            ], { stdio: 'ignore', timeout: 3000 })
+          } else {
+            spawnSync('reg', [
+              'delete', 'HKCU\\Software\\Microsoft\\Windows\\Windows Error Reporting',
+              '/v', 'DontShowUI', '/f',
+            ], { stdio: 'ignore', timeout: 3000 })
+          }
+        } catch {
+          // Best-effort: cleanup failure is non-fatal.
+        }
+      }
+    })
 
     ctx.inject(['systemPrompt'], (scope: Context) => {
       scope.systemPrompt.context({

@@ -5,6 +5,17 @@ import z from '@deepseek-ai/schemastery'
 /** Built-in preferences accepted at the registry and settings boundaries. */
 export const THEME_PREFERENCES = ['light', 'dark', 'system'] as const
 
+/**
+ * Base color scheme each built-in concrete theme resolves to before the
+ * client registry exists. The pre-plugin bootstrap has no ThemeRuntime, so
+ * the Host side maps every preference to the palette attribute itself;
+ * `system` resolves through `prefers-color-scheme` at bootstrap time.
+ */
+export const THEME_BOOT_SCHEMES = {
+  light: 'light',
+  dark: 'dark',
+} as const satisfies Record<Exclude<ThemePreference, 'system'>, 'light' | 'dark'>
+
 /** Settings namespace owned by the theme plugin. */
 export const THEME_SETTINGS_NAMESPACE = 'ui-theme'
 
