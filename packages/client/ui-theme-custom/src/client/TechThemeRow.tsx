@@ -58,7 +58,7 @@ export function TechThemeRow({ t, setTheme, useStore }: TechThemeRowProps) {
             type="button"
             className={clsx(css.themeCube, preference === id && css.selected)}
             aria-pressed={preference === id}
-            onClick={() => { setTheme(id) }}
+            onClick={() => { setTheme(id as ThemePreference) }}
           >
             <Icon />
             {t(labelKey)}

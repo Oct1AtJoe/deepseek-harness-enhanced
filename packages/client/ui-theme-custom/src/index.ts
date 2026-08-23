@@ -6,6 +6,7 @@
  * completes the theme registration and handles subsequent switches.
  */
 import type { Context } from '@deepseek-ai/cordis'
+import type { IndexInjection } from '@deepseek-ai/dsh-host-webserver'
 
 /** Self-executing boot script. */
 const BOOT_SCRIPT = `(function(){
@@ -24,7 +25,7 @@ try {
  * @param ctx - Host context.
  */
 export function apply(ctx: Context): void {
-  ctx.on('webserver/index-inject', (table: { push: (item: { kind: string; placement: string; text: string }) => void }) => {
+  ctx.on('webserver/index-inject', (table: IndexInjection[]) => {
     table.push({ kind: 'script', placement: 'body', text: BOOT_SCRIPT })
   })
 }
