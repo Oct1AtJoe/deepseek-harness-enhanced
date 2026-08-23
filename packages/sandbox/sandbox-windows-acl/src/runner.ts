@@ -133,7 +133,8 @@ async function main(): Promise<number> {
 
   const api = await win32()
   // Suppress Windows "Application Error" dialogs for spawn failures under the
-  // restricted token. The child inherits this error mode via CREATE_DEFAULT_ERROR_MODE.
+  // restricted token. Omit CREATE_DEFAULT_ERROR_MODE when spawning so the child
+  // naturally inherits this error mode — and, by default, its own children inherit it too.
   api.setErrorMode(abi.SEM_NOGPFAULTERRORBOX)
   // Ignore this process's own CTRL+C: the confined child (same console) keeps
   // handling its own; the runner must survive to revoke grants and mirror the
