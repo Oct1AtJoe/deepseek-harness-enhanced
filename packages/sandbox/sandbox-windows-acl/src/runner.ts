@@ -47,10 +47,17 @@
 import { existsSync, mkdtempSync, rmSync, statSync } from 'node:fs'
 import { join } from 'node:path'
 
-import { win32 } from './ffi.ts'
+import { win32, win32Sync } from './ffi.ts'
 import * as abi from './win32-abi.ts'
 import { AclSandbox, assertTempRootOutsideWorkspace } from './index.ts'
 import { tempWriteSid, workspaceWriteSid } from './workspace-sid.ts'
+
+// Set SEM_NOGPFAULTERRORBOX at MODULE load time, synchronously, before main()
+// runs or any import can throw. This way crash-dialog suppression is active
+// even when the runner fails during module loading (e.g. a later import's
+// native binding crashes). win32Sync() returns the cached FFI table; calling
+// it again in main() is idempotent.
+win32Sync().setErrorMode(abi.SEM_NOGPFAULTERRORBOX)
 
 const RUNNER_SIGNATURE = 'windows-acl-run'
 const RUNNER_FAILURE_EXIT = 127

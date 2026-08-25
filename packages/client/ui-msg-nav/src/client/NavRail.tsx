@@ -137,7 +137,6 @@ export function makeNavRail(sessionsSvc: object): React.FC<NavRailProps> {
   let ringEl: HTMLElement | null = null
   let activeIdx = -1
   let lastRowCount = -1
-  let lastGeo: { right: number; railH: number; top: number } | null = null
   const setters: {
     active: ((v: number) => void) | null
     rowCount: ((v: number) => void) | null
@@ -449,9 +448,11 @@ export function makeNavRail(sessionsSvc: object): React.FC<NavRailProps> {
         top = Math.max(8, Math.round((srect.height - railH) / 2 + srect.top))
         top = Math.round(top * dpr) / dpr
       } catch { return }
-      if (lastGeo !== null && lastGeo.right === right && lastGeo.railH === railH && lastGeo.top === top) return
-      lastGeo = { right, railH, top }
-      if (setters.geo) setters.geo(lastGeo)
+      // No value cache: the dock unmounts this rail on hero states and the
+      // closure cache would survive the remount, so a same-geometry measure
+      // resolved last time would skip the setter and leave geo at its null
+      // fallback (window right edge, top 120) forever.
+      if (setters.geo) setters.geo({ right, railH, top })
     }
     latest.measure = measure
 
@@ -501,6 +502,21 @@ export function makeNavRail(sessionsSvc: object): React.FC<NavRailProps> {
       startLoadAll(sid)
       return stopLoadAll
     }, [props.sessionId, projectionActive])
+
+    // Session switch resets per-session position state and re-measures so
+    // a remount (dock unmounts in hero states) or a same-count session
+    // switch doesn't leave geo stale (fallback) or listScroll/activeIdx
+    // pointing at the previous conversation.
+    React.useEffect(() => {
+      activeIdx = -1
+      lastRowCount = -1
+      if (setters.active) setters.active(-1)
+      if (setters.rowCount) setters.rowCount(-1)
+      ensureWired()
+      measure()
+      scrollspy()
+      setListScroll(0)
+    }, [props.sessionId])
 
     React.useEffect(() => {
       ensureWired()

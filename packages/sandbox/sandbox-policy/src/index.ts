@@ -114,7 +114,7 @@ export class SandboxPolicyService extends Service {
     // user's entire process tree. WER flags (WerSetFlags) are per-process and
     // do not propagate to child processes, so the CRT-only SEM_NOGPFAULTERRORBOX
     // (set in the ACL runner) cannot suppress WER dialogs for grandchildren.
-    // The registry approach suppresses every WER crash dialog for the session.
+    // Two mechanisms: DontShowUI (UI suppression) + ExcludedApplications (per-exe).
     ctx.effect(() => {
       if (process.platform !== 'win32') return () => {}
       let previousRs: string | undefined
@@ -131,6 +131,15 @@ export class SandboxPolicyService extends Service {
           'add', 'HKCU\\Software\\Microsoft\\Windows\\Windows Error Reporting',
           '/v', 'DontShowUI', '/t', 'REG_DWORD', '/d', '1', '/f',
         ], { stdio: 'ignore', timeout: 3000 })
+        // Add common crash-prone executables to the WER exclusion list.
+        // This prevents WerFault.exe from showing any dialog at all for them.
+        const excludedExes = ['node.exe', 'cmd.exe', 'powershell.exe', 'pwsh.exe', 'git.exe']
+        for (const exe of excludedExes) {
+          spawnSync('reg', [
+            'add', 'HKCU\\Software\\Microsoft\\Windows\\Windows Error Reporting\\ExcludedApplications',
+            '/v', exe, '/t', 'REG_DWORD', '/d', '1', '/f',
+          ], { stdio: 'ignore', timeout: 3000 })
+        }
       } catch {
         // Best-effort: registry read/write failure is non-fatal.
       }

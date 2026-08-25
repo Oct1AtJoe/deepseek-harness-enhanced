@@ -1,5 +1,41 @@
 # AGENTS.md
 
+## Global agent rules
+
+These apply to every task in this repo.
+
+### 0. 思考与回答必须用中文（强制性约束）
+
+All thinking, reasoning, internal deliberation, **and all responses to the user** by the agent **MUST be in Chinese**. This applies to every chain-of-thought, plan formulation, analysis, decision-making step, and every user-facing message. English is permitted only for code identifiers, technical terms without a standard Chinese equivalent, and direct quotations from English source material.
+
+### 1. Requirement confirmation
+
+If unclear, **confirm with user before acting**. One confirmation costs less than rework from a wrong guess.
+
+- **Complex/large**: present a concrete plan first (approach + steps); wait for approval before executing.
+- **Small**: confirm when unclear, ambiguous, or missing key context — never guess, never decide on your own.
+
+Procedure: restate understanding → list assumptions/open points → offer 2-3 options → wait for confirmation. Exception: facts directly verifiable from the repo are not open points.
+
+### 2. Coding standards
+- Minimal: prefer deletion over addition; no unrequested dependencies, abstractions, or boilerplate.
+- Reuse first: existing code → standard library → installed deps → new deps.
+- Follow repo conventions: directory structure, naming, strict typing, error handling, lint, formatting.
+
+### 3. Testing
+- Every behavior change carries tests; run relevant tests and build before committing.
+- Run lint/fix only on files this change touches.
+
+### 4. Commits and code review
+- Small commits, one topic each; Conventional Commits format, state motivation.
+- PRs stay independent and traceable; no unrelated changes.
+
+### 5. Documentation
+- Behavior/interface changes update the affected README, JSDoc, and related documentation in the same change.
+
+### 6. Security
+- Never commit secrets, tokens, or .env files. Confirm before destructive operations (delete, overwrite, push).
+
 DeepSeek Harness is a plugin-based agent harness on vendored Cordis: **everything is a plugin**. Read [docs/architecture.md](docs/architecture.md) before changing `packages/`; follow [docs/AGENTS.md](docs/AGENTS.md) for documentation.
 
 ## Pre-release stance: foundation over blast radius

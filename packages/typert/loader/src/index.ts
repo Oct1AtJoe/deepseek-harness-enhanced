@@ -330,7 +330,10 @@ export async function apply(ctx: Context, config: Config): Promise<void> {
       artifactPath.set(pkgName, null)
       return null
     }
-    const pkg = JSON.parse(readFileSync(pkgPath, 'utf8')) as Record<string, unknown>
+    const raw = readFileSync(pkgPath, 'utf8')
+    const stripped = raw.replace(/^\uFEFF/, '')
+    if (stripped !== raw) console.error('[typert-loader] BOM stripped from', pkgPath)
+    const pkg = JSON.parse(stripped) as Record<string, unknown>
     const rel = typertExportOf(pkgName, pkg.exports)
     if (rel === undefined && configured.has(pkgName)) {
       throw new Error(`typert-loader: configured package "${pkgName}" does not export "${TYPERT_HOST_EXPORT}"`)

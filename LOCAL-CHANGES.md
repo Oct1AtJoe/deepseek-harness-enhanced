@@ -22,12 +22,12 @@ CREATE_DEFAULT_ERROR_MODE (0x04000000)
 
 ```diff
 // 第 128 行 (spawnSandboxed — 管道 I/O 路径)
--    0 | abi.CREATE_DEFAULT_ERROR_MODE, // no creation flags except inherit error mode
-+    0, // no CREATE_DEFAULT_ERROR_MODE → child inherits SEM_NOGPFAULTERRORBOX
+-    0 | abi.CREATE_DEFAULT_ERROR_MODE,
++    0,
 
 // 第 312 行 (spawnSandboxedInherited — 继承 I/O 路径)
--    abi.CREATE_SUSPENDED | abi.CREATE_DEFAULT_ERROR_MODE, // inherit error mode to suppress crash dialogs
-+    abi.CREATE_SUSPENDED, // no CREATE_DEFAULT_ERROR_MODE → child inherits SEM_NOGPFAULTERRORBOX
+-    abi.CREATE_SUSPENDED | abi.CREATE_DEFAULT_ERROR_MODE,
++    abi.CREATE_SUSPENDED,
 ```
 
 #### `packages/sandbox/sandbox-windows-acl/src/runner.ts`
@@ -39,21 +39,26 @@ CREATE_DEFAULT_ERROR_MODE (0x04000000)
 +  // naturally inherits this error mode — and, by default, its own children inherit it too.
 ```
 
+```diff
+// 模块级 SetErrorMode — 在 import 之后、main() 之前立即执行
++ import { win32, win32Sync } from './ffi.ts'
++ win32Sync().setErrorMode(abi.SEM_NOGPFAULTERRORBOX)
+```
+
 #### `packages/sandbox/sandbox-windows-acl/src/win32-abi.ts`
 
 ```diff
-// 第 152-155 行 JSDoc 修正
 -  /** CREATE_DEFAULT_ERROR_MODE: the child inherits the caller's error-mode preference ... */
-+  /** CREATE_DEFAULT_ERROR_MODE: the child does NOT inherit the caller's error mode — it gets the system default instead. Keep this flag OUT to propagate SEM_NOGPFAULTERRORBOX. */
++  /** CREATE_DEFAULT_ERROR_MODE: the child does NOT inherit the caller's error mode — use system default. Keep OUT. */
 
 -  /** SEM_NOGPFAULTERRORBOX: suppress ... for this process and its children (when CREATE_DEFAULT_ERROR_MODE is passed). */
-+  /** SEM_NOGPFAULTERRORBOX: suppress Application Error dialog. Omit CREATE_DEFAULT_ERROR_MODE so children inherit the suppression. */
++  /** SEM_NOGPFAULTERRORBOX: suppress Application Error dialog. Omit CREATE_DEFAULT_ERROR_MODE so children inherit. */
 ```
 
 ### 验证方法
 
 ```powershell
-# 经验测试：子进程是否继承 SEM_NOGPFAULTERRORBOX
+# 子进程是否继承 SEM_NOGPFAULTERRORBOX
 parent SetErrorMode(2)
 CreateProcess(child) → child SetErrorMode(0) → 返回值含 0x2 说明已继承
 ```
@@ -62,24 +67,24 @@ CreateProcess(child) → child SetErrorMode(0) → 返回值含 0x2 说明已继
 
 ## 2. Add: WER 崩溃对话框抑制
 
-**问题**：`SEM_NOGPFAULTERRORBOX` 仅抑制 CRT 级崩溃对话框，Windows 10+ 的 Windows Error Reporting (WER) 对话框独立于 `SetErrorMode`，需通过注册表禁用。
+**问题**：`SEM_NOGPFAULTERRORBOX` 仅抑制 CRT 级崩溃对话框，Windows 10+ 的 Windows Error Reporting (WER) 对话框独立于 `SetErrorMode`，需通过注册表禁用。即使 `DontShowUI=1` 对部分崩溃类型无效，所以额外加 `ExcludedApplications`。
 
 ### 修改文件
 
 #### `packages/sandbox/sandbox-policy/src/index.ts`
 
-在 `SandboxPolicyService` 构造函数中添加 `ctx.effect()` 生命周期：
+两个机制在 `SandboxPolicyService` 构造函数的 `ctx.effect()` 中：
 
 ```typescript
 // 新增 import
 import { spawnSync } from 'node:child_process'
 
-// 在 constructor 中 super() 之后添加
+// 完整添加的代码段（在 constructor 中 super() 之后）：
 ctx.effect(() => {
   if (process.platform !== 'win32') return () => {}
   let previousRs: string | undefined
   try {
-    // 读取当前值
+    // 1. DontShowUI — 抑制 WER 标准对话框
     const current = spawnSync('reg', [
       'query', 'HKCU\\Software\\Microsoft\\Windows\\Windows Error Reporting',
       '/v', 'DontShowUI',
@@ -88,17 +93,25 @@ ctx.effect(() => {
       const match = /DontShowUI\s+REG_DWORD\s+(0x[0-9a-fA-F]+)/u.exec(current.stdout)
       if (match !== null) previousRs = match[1]
     }
-    // 设为 1 禁用 WER UI
     spawnSync('reg', [
       'add', 'HKCU\\Software\\Microsoft\\Windows\\Windows Error Reporting',
       '/v', 'DontShowUI', '/t', 'REG_DWORD', '/d', '1', '/f',
     ], { stdio: 'ignore', timeout: 3000 })
+
+    // 2. ExcludedApplications — 对易崩溃的 exe 彻底关闭 WER
+    const excludedExes = ['node.exe', 'cmd.exe', 'powershell.exe', 'pwsh.exe', 'git.exe']
+    for (const exe of excludedExes) {
+      spawnSync('reg', [
+        'add', 'HKCU\\Software\\Microsoft\\Windows\\Windows Error Reporting\\ExcludedApplications',
+        '/v', exe, '/t', 'REG_DWORD', '/d', '1', '/f',
+      ], { stdio: 'ignore', timeout: 3000 })
+    }
   } catch {
     // 非致命
   }
   return () => {
     try {
-      // DSH 退出时恢复原值
+      // DSH 退出时恢复 DontShowUI 原值
       if (previousRs !== undefined) {
         spawnSync('reg', [
           'add', 'HKCU\\Software\\Microsoft\\Windows\\Windows Error Reporting',
@@ -110,9 +123,7 @@ ctx.effect(() => {
           '/v', 'DontShowUI', '/f',
         ], { stdio: 'ignore', timeout: 3000 })
       }
-    } catch {
-      // 非致命
-    }
+    } catch { /* 非致命 */ }
   }
 })
 ```
@@ -121,13 +132,8 @@ ctx.effect(() => {
 
 ## 重建
 
-修改源码后需重新编译 `lib/` 才能生效：
-
 ```sh
 pnpm run build:lib
-# 或只编译改过的包
-pnpm --filter @deepseek-ai/dsh-sandbox-windows-acl run build
-pnpm --filter @deepseek-ai/dsh-sandbox-policy run build
 ```
 
 然后**重启 DSH**。
@@ -137,7 +143,5 @@ pnpm --filter @deepseek-ai/dsh-sandbox-policy run build
 ## 相关提交
 
 ```
-214ee4f8bf feat: add 4 glassmorphism themes (void/jade/solar/glacial) + glass-effect docs
+214ee4f8bf feat: add 4 glassmorphism themes + crash-dialog fix
 ```
-
-> 注：该 commit 同时包含了 ui-theme 的预存修改（与我无关，是你工作区的既有改动）。

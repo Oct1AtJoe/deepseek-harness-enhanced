@@ -438,7 +438,10 @@ export class ClientModuleRegistry extends Service {
       this.pkgMeta.set(pkgName, null)
       return null
     }
-    const pkg = JSON.parse(readFileSync(pkgPath, 'utf8')) as Record<string, unknown>
+    const raw = readFileSync(pkgPath, 'utf8')
+    const stripped = raw.replace(/^\uFEFF/, '')
+    if (stripped !== raw) console.error('[client-modules] BOM stripped from', pkgPath)
+    const pkg = JSON.parse(stripped) as Record<string, unknown>
     const dsh = pkg.dsh
     const decl = parseDshClient(
       pkgName,
