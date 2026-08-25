@@ -328,6 +328,10 @@
     - id: ui-subagent-custom
       name: '@deepseek-ai/dsh-client-ui-subagent-custom'
 
+    # Desktop notifications; forks the marketplace dsh-notification.
+    - id: dsh-notification-custom
+      name: '@deepseek-ai/dsh-notification-custom'
+
     # aurora/nebula themes registered via ctx.theme.register.
     - id: ui-theme-custom
       name: '@deepseek-ai/dsh-client-ui-theme-custom'
@@ -345,10 +349,6 @@
     # Subagent backend management: Remote directory (list/install/remove/update).
     - id: subagent-manager
       name: '@deepseek-ai/dsh-host-subagent-manager'
-
-    # Desktop notifications; forks the marketplace dsh-notification.
-    - id: dsh-notification-custom
-      name: '@deepseek-ai/dsh-notification-custom'
 
     # Conversation node navigation rail; forks the marketplace dsh-plugin-msg-nav.
     - id: ui-msg-nav

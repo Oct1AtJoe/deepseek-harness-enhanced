@@ -146,6 +146,8 @@ export function apply(ctx) {
   const NOTIFY_TTL_MS = 60_000
   /** 每个 session 最后通知过的 turn/end 的 seq（未通知过的 turn/end 才发通知） */
   const lastTurnEndNotif = new Map()   // sessionId → seq
+  /** 已完成首次事件处理的 session（防事件重放期间误发通知） */
+  const sessionInitialized = new Set()   // sessionId
 
   // ---- 会话状态聚合（v8：官方自渲染 client �?ctx.sessions——Node half 聚合�?/state�?---
   // client 自执行脚�?`apply({})` 拿不到宿�?sessions 服务（官方注入面只给 __DSH_BOOT__），
@@ -198,7 +200,10 @@ export function apply(ctx) {
    * @param {string} [tagPrefix='notif'] 通知 tag 前缀
    */
   const setPetNotification = (id, reasonOrPending, session, tagPrefix = 'notif') => {
-    const title = TITLE_MAP[reasonOrPending] ?? PENDING_TITLE_MAP[reasonOrPending] ?? '任务完成'
+    const title = TITLE_MAP[reasonOrPending] ?? PENDING_TITLE_MAP[reasonOrPending] ?? (
+      (console.warn(`[kanye-pet] unknown notification reason "${reasonOrPending}" for ${id}, using fallback`),
+      '任务完成')
+    )
     const body = resolveSessionTitle(session) ?? (typeof session?.label === 'string' ? session.label : null) ?? id
     petNotification = {
       tag: `${tagPrefix}-${id}-${Date.now()}`,
@@ -208,7 +213,7 @@ export function apply(ctx) {
       reason: reasonOrPending,
       expiresAt: Date.now() + NOTIFY_TTL_MS,
     }
-    console.log(`[kanye-pet] notify ${id}: "${title}"`)
+    console.log(`[kanye-pet] notify ${id}: "${title}" (reason: ${reasonOrPending})`)
     broadcastEvent()
   }
   const sessionUpdate = () => {
@@ -385,6 +390,7 @@ export function apply(ctx) {
               if (e?.type === 'turn/end' && (e.seq ?? 0) > lastSeq) lastSeq = e.seq
             }
             if (lastSeq >= 0) lastTurnEndNotif.set(id, lastSeq)
+            sessionInitialized.add(id)
           } else {
             const lastSeq = lastTurnEndNotif.get(id) ?? -1
             for (const e of events) {
@@ -397,7 +403,8 @@ export function apply(ctx) {
           }
         }
         // ---- 检测 pending interaction 事件（这些不产生 turn/end blocked）----
-        if (configRef.desktopPetEnabled !== false) {
+        // 仅在会话初始化完成后处理，防事件重放期间误发通知
+        if (configRef.desktopPetEnabled !== false && sessionInitialized.has(id)) {
           // 审批请求（工具扩权等）
           if (event?.type === 'approval/asked') {
             setPetNotification(id, 'approval', session, 'approval')
@@ -450,13 +457,14 @@ export function apply(ctx) {
             // ---- 调试：打印当前状态 ----
             console.log(`[kanye-pet] DEBUG /state: desktopPetEnabled=${configRef.desktopPetEnabled}, petNotification=${petNotification !== null ? petNotification.title : 'null'}, sessionsSvc=${typeof sessionsSvc?.list}`)
             // ---- 轮询兜底：扫描所有会话中未通知的 blocked turn/end ----
+            // 仅扫已初始化的会话（sessionInitialized），防事件重放前的误判
             if (petNotification === null && configRef.desktopPetEnabled !== false
               && sessionsSvc !== undefined && typeof sessionsSvc.list === 'function') {
               try {
                 for (const s of sessionsSvc.list()) {
                   if (s === null || typeof s !== 'object') continue
                   const sid = typeof s.id === 'string' ? s.id : null
-                  if (sid === null) continue
+                  if (sid === null || !sessionInitialized.has(sid)) continue
                   const events = typeof s.events?.slice === 'function' ? s.events : []
                   let lastTurnEnd = null
                   for (const e of events) {

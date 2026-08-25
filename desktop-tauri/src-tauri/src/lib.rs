@@ -478,10 +478,45 @@ fn open_session(app: &AppHandle, session_id: &str) {
 /// 桌宠气泡点击：显示主窗口并跳转到会话（与 Windows 通知点击同一行为）。
 #[tauri::command]
 fn pet_open_session(app: AppHandle, session_id: String) {
-    show_main(&app);
-    if !session_id.is_empty() {
-        open_session(&app, &session_id);
+    let handle = app.clone();
+    let dispatched = app.run_on_main_thread(move || {
+        let Some(w) = handle.get_webview_window("main") else {
+            log::warn!("pet_open_session：未找到 main 窗口");
+            return;
+        };
+        log::info!("pet_open_session：window visible={:?}", w.is_visible());
+        let _ = w.show();
+        let _ = w.unminimize();
+        let _ = w.set_always_on_top(true);
+        let _ = w.set_focus();
+        // open_session 必须在主线程执行：eval 依赖主线程的 webview 上下文
+        if !session_id.is_empty() {
+            let quoted = serde_json::to_string(&session_id).unwrap_or_else(|_| "\"\"".to_string());
+            let script = format!(
+                "console.log('[kanye-pet] eval executing, sid=', {quoted});\
+                 window.dispatchEvent(new CustomEvent('dsh:open-session', {{ detail: {{ sessionId: {quoted} }} }}));\
+                 console.log('[kanye-pet] event dispatched');"
+            );
+            log::info!("pet_open_session eval: session_id={session_id}");
+            if let Err(e) = w.eval(&script) {
+                log::warn!("pet_open_session eval 失败：{e}");
+            } else {
+                log::info!("pet_open_session eval OK");
+            }
+        }
+    });
+    if let Err(e) = dispatched {
+        log::warn!("pet_open_session 主线程派发失败：{e}");
     }
+    // 延时收尾
+    let handle = app.clone();
+    tauri::async_runtime::spawn(async move {
+        tokio::time::sleep(Duration::from_millis(300)).await;
+        if let Some(win) = handle.get_webview_window("main") {
+            let _ = win.set_always_on_top(false);
+            let _ = win.set_focus();
+        }
+    });
 }
 
 /// 桌宠本体点击：显示主窗口（弹到桌面最上层）。
