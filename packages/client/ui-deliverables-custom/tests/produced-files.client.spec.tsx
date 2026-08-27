@@ -6,7 +6,7 @@
  * (HMR safety) against the real SlotRegistry.
  */
 import { Context } from '@deepseek-ai/cordis'
-import { act, cleanup, fireEvent, render, within } from '@testing-library/react'
+import { cleanup, fireEvent, render, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
   ConversationEventRegistry, ConversationNodeAssembler, SlotRegistry,
@@ -465,83 +465,30 @@ describe('ProducedFiles row', () => {
     expect(fitProducedFiles(20, 8, [60], [70, 50])).toBe(0)
   })
 
-  it('keeps one measured line, updates on resize, and opens a file or the workspace folder', () => {
+  it('shows all chips up to the cap in a multi-line row, opens files, and shows the folder action', () => {
     const paths = ['deep/a.html', 'b.css', 'c.ts', 'd.ts', 'e.ts', 'f.ts', 'g.ts']
       .map(path => ({ path, hunks: [], totalHunks: [] }))
     const openFile = vi.fn<(path: string) => void>()
-    let available = 226
-    let resize: ResizeObserverCallback | undefined
-    const disconnect = vi.fn()
-    const observeNode = vi.fn<(target: Element) => void>()
-    vi.stubGlobal('ResizeObserver', class {
-      constructor(callback: ResizeObserverCallback) { resize = callback }
-      observe(target: Element): void {
-        expect(target).toBeInstanceOf(Element)
-        observeNode(target)
-      }
-      disconnect(): void { disconnect() }
-    })
-    Object.defineProperty(HTMLElement.prototype, 'clientWidth', {
-      configurable: true,
-      get(this: HTMLElement) { return this.hasAttribute('data-produced-files-row') ? available : 0 },
-    })
-    const rect = (width: number): DOMRect => ({
-      x: 0, y: 0, width, height: 22, top: 0, right: width, bottom: 22, left: 0,
-      toJSON: () => ({}),
-    })
-    // Probes are chip spans now (name + optional totals + chevron); the
-    // localized remainder probe's text starts with the '+' sign.
-    const bounds = vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect')
-      .mockImplementation(function getProbeRect(this: HTMLElement) {
-        if (this.closest('[aria-hidden="true"]') === null) return rect(0)
-        const text = this.textContent ?? ''
-        if (text.startsWith('+')) return rect(60)
-        return rect(text === 'a.html' || text === 'b.css' ? 50 : 100)
-      })
-
     const view = render(
       <ProducedFiles matched={paths} openFile={openFile} {...capability(true)} t={t} />,
     )
     expect(view.getByText('产物')).toBeTruthy()
     const row = view.container.querySelector('[data-produced-files-row]')
     if (!(row instanceof HTMLElement)) throw new Error('produced row missing')
-    // The third probe is 100px: two chips plus the remainder fit, three do not.
-    expect(within(row).getAllByRole('button')).toHaveLength(2)
-    expect(within(row).getByText('+ 5 个文件')).toBeTruthy()
+    // All 7 chips fit below the SHOWN_LIMIT=30 cap.
+    expect(within(row).getAllByRole('button')).toHaveLength(7)
+    expect(within(row).queryByText('+')).toBeNull()
     const chip = view.getByRole('button', { name: '打开 deep/a.html' })
     expect(chip.textContent).toBe('a.html')
     expect(chip.getAttribute('title')).toBe('deep/a.html')
-    expect(view.queryByRole('button', { name: '打开 g.ts' })).toBeNull()
     fireEvent.click(chip)
     expect(openFile).toHaveBeenCalledWith('deep/a.html')
 
+    // "show in folder" appears when there are produced files and the host
+    // can open paths (no longer gated on overflow).
     const showFolder = view.getByRole('button', { name: '在文件夹中显示' })
     fireEvent.click(showFolder)
     expect(openFile).toHaveBeenLastCalledWith('.')
-
-    available = 150
-    act(() => { resize?.([], {} as ResizeObserver) })
-    expect(within(row).getAllByRole('button')).toHaveLength(1)
-    expect(within(row).getByText('+ 6 个文件')).toBeTruthy()
-
-    // A missing/unsupported computed gap falls back to zero rather than NaN.
-    vi.stubGlobal('getComputedStyle', () => ({ columnGap: '', gap: '' } as CSSStyleDeclaration))
-    available = 165
-    act(() => { resize?.([], {} as ResizeObserver) })
-    expect(within(row).getAllByRole('button')).toHaveLength(2)
-
-    // Ref callbacks leave nulls in the probe arrays when the candidate set
-    // shrinks; the replacement observer must skip those stale slots.
-    observeNode.mockClear()
-    view.rerender(
-      <ProducedFiles matched={paths.slice(0, 1)} openFile={openFile} {...capability(true)} t={t} />,
-    )
-    expect(within(row).getAllByRole('button')).toHaveLength(1)
-    expect(observeNode).toHaveBeenCalledTimes(3)
-
-    view.unmount()
-    expect(disconnect).toHaveBeenCalledTimes(2)
-    bounds.mockRestore()
   })
 
   it('shows the conversation +/- totals next to the name and expands the change below the row', () => {
@@ -621,25 +568,33 @@ describe('ProducedFiles row', () => {
     expect(within(panel).queryByText('x')).toBeNull()
   })
 
-  it('keeps the folder action absent without overflow or a local native opener', () => {
+  it('shows the folder action when files exist and the host supports it, absent otherwise', () => {
     const openFile = vi.fn<(path: string) => void>()
     const matches = ['a.md', 'b.md', 'c.md', 'd.md', 'e.md', 'f.md', 'g.md']
       .map(path => ({ path, hunks: [], totalHunks: [] }))
+    // Single file + capable host → folder action appears (unlike old
+    // overflow-only gate).
     const view = render(
       <ProducedFiles matched={[matches[0]!]} openFile={openFile} {...capability(true)} t={t} />,
     )
-    expect(view.queryByRole('button', { name: '在文件夹中显示' })).toBeNull()
+    expect(view.queryByRole('button', { name: '在文件夹中显示' })).not.toBeNull()
+    // Unavailable host capabilities still hide it.
     for (const unavailable of [capability(false), capability(true, false), capability(undefined)]) {
       view.rerender(<ProducedFiles matched={matches} openFile={openFile} {...unavailable} t={t} />)
       expect(view.queryByRole('button', { name: '在文件夹中显示' })).toBeNull()
     }
   })
 
-  it('uses singular English copy when exactly one file is hidden', () => {
+  it('uses singular English copy when exactly one file is hidden beyond the cap', () => {
+    // Need more than SHOWN_LIMIT (30) files to trigger the hidden count.
+    const fileCount = 31
     const view = render(
       <ProducedFiles
-        matched={['a.md', 'b.md', 'c.md', 'd.md', 'e.md', 'f.md', 'g.md']
-          .map(path => ({ path, hunks: [], totalHunks: [] }))}
+        matched={Array.from({ length: fileCount }, (_, i) => ({
+          path: `file-${i}.md`,
+          hunks: [],
+          totalHunks: [],
+        }))}
         openFile={() => {}}
         {...capability(false)}
         t={makeTranslate(en)}

@@ -45,12 +45,29 @@ import { resolve } from 'node:path'
 
 import { grantWrite, revokeWrite } from './acl.ts'
 import { Win32Error } from './errors.ts'
-import { allocPtrSlot, decodePtr, isNullPtr, throwLastError, win32 } from './ffi.ts'
+import { allocPtrSlot, decodePtr, isNullPtr, throwLastError, win32, win32Sync } from './ffi.ts'
 import type { NativePtr, Win32Bindings } from './ffi.ts'
 import { assertPrivateTempDisjoint } from './path-boundary.ts'
 import { drainPipe, spawnSandboxed, spawnSandboxedInherited, waitForExit } from './spawn.ts'
 import { createRestrictedToken, findLogonSid, makeWellKnownSid, openCurrentProcessToken, setTokenDefaultDaclGrant } from './token.ts'
 import * as abi from './win32-abi.ts'
+
+// Suppress Windows Application Error (CRT) dialog for THIS process (the main
+// DSH server) and ALL its children — the runner, pwsh, and grandchildren like
+// where.exe/winget.exe/git.exe.  SetErrorMode is per-process; children inherit
+// the mode when CREATE_DEFAULT_ERROR_MODE is omitted from CreateProcess.
+// Node.js's child_process module does NOT pass that flag, so the main process
+// setting SEM_NOGPFAULTERRORBOX | SEM_FAILCRITICALERRORS here propagates
+// through the entire process tree — even if a middle process (e.g. pwsh 7's
+// .NET runtime) resets its own error mode, this ensures that this process and
+// its direct children always have suppression active.
+if (process.platform === 'win32') {
+  try {
+    win32Sync().setErrorMode(abi.SEM_NOGPFAULTERRORBOX | abi.SEM_FAILCRITICALERRORS)
+  } catch {
+    // koffi or kernel32 not available (e.g. testing without native bindings)
+  }
+}
 
 export { quoteArg } from './spawn.ts'
 export { AclWriteGrant } from './grant.ts'

@@ -153,6 +153,8 @@ export const CREATE_SUSPENDED = 0x4
 export const CREATE_DEFAULT_ERROR_MODE = 0x04000000
 /** SEM_NOGPFAULTERRORBOX: suppress Application Error dialog. Omit CREATE_DEFAULT_ERROR_MODE so children inherit the suppression. */
 export const SEM_NOGPFAULTERRORBOX = 0x0002
+/** SEM_FAILCRITICALERRORS: suppress critical-error msg box (e.g. "No disk" / DLL load). Combine with SEM_NOGPFAULTERRORBOX. */
+export const SEM_FAILCRITICALERRORS = 0x0001
 // winbase.h lines ~497-499: GetStdHandle selectors.
 /** STD_INPUT_HANDLE: GetStdHandle selector for the standard input. */
 export const STD_INPUT_HANDLE = -10

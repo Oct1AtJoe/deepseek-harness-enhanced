@@ -133,7 +133,7 @@ export class SandboxPolicyService extends Service {
         ], { stdio: 'ignore', timeout: 3000 })
         // Add common crash-prone executables to the WER exclusion list.
         // This prevents WerFault.exe from showing any dialog at all for them.
-        const excludedExes = ['node.exe', 'cmd.exe', 'powershell.exe', 'pwsh.exe', 'git.exe']
+        const excludedExes = ['node.exe', 'cmd.exe', 'powershell.exe', 'pwsh.exe', 'git.exe', 'where.exe', 'winget.exe']
         for (const exe of excludedExes) {
           spawnSync('reg', [
             'add', 'HKCU\\Software\\Microsoft\\Windows\\Windows Error Reporting\\ExcludedApplications',

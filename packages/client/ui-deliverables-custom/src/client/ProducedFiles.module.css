@@ -1,0 +1,254 @@
+/* Turn-tail produced-files summary: a multi-line chip lane plus an optional
+   native-folder action below it. Wraps to multiple rows when chips overflow
+   the available width. */
+
+.root {
+  position: relative;
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  align-items: center;
+  column-gap: 8px;
+  row-gap: 6px;
+  margin-top: 16px;
+  font-size: 13px;
+  line-height: 22px;
+}
+
+.label {
+  grid-column: 1;
+  grid-row: 1;
+  color: var(--dsw-alias-label-tertiary);
+}
+
+.row {
+  grid-column: 2;
+  grid-row: 1;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+/* One produced file. A link by behavior (it opens the file), a chip by shape:
+   full paths are long, while the multi-line lane wraps instead of truncating.
+   The chip wraps the name, the +/- line totals, and the expand chevron; the
+   name keeps the click target, the chevron toggles the change below the row. */
+.chip {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  border-radius: 6px;
+  background: var(--dsw-alias-interactive-bg-hover);
+}
+
+.file {
+  flex: 0 0 auto;
+  max-width: 320px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  margin: 0;
+  padding: 0 6px 0 8px;
+  border: none;
+  background: transparent;
+  color: var(--dsw-alias-label-secondary);
+  font: inherit;
+  cursor: pointer;
+}
+
+.file:hover {
+  color: var(--dsw-alias-label-primary);
+  text-decoration: underline;
+}
+
+.file:focus-visible,
+.toggle:focus-visible,
+.showFolder:focus-visible,
+.diffPath:focus-visible,
+.diffCollapse:focus-visible {
+  outline: none;
+  box-shadow: inset 0 0 0 2px var(--dsw-alias-border-l3);
+}
+
+/* The conversation's +/- line totals, drawn in the diff card's own
+   meaning-carrying colors (added on success, removed on error). */
+.stats {
+  flex: 0 0 auto;
+  display: inline-flex;
+  gap: 3px;
+  font-size: 12px;
+  line-height: 22px;
+}
+
+.added {
+  color: var(--dsw-alias-state-success-primary);
+}
+
+.removed {
+  color: var(--dsw-alias-state-error-primary);
+}
+
+/* The expand chevron; its rotation is the row's only expanded affordance,
+   with the aria-expanded state on the button. */
+.toggle {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  margin: 0;
+  padding: 0 8px 0 2px;
+  border: none;
+  background: transparent;
+  color: var(--dsw-alias-label-tertiary);
+  cursor: pointer;
+}
+
+.toggle:hover {
+  color: var(--dsw-alias-label-secondary);
+}
+
+/* The expanded change below the row: one card in the code-block family, a
+   title bar over the primitive's body. The bar carries the path (name in the
+   primary tone, directory dimmed), the +/- totals, and its own collapse
+   control; the primitive's internal path headers and footer stay off. */
+.diff {
+  grid-column: 2;
+  grid-row: 2;
+  min-width: 0;
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 12px;
+  overflow: hidden;
+  background: var(--dsw-alias-markdown-code-block);
+  animation: produced-diff-in 160ms ease-out;
+}
+
+.diffHeader {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 6px 6px 12px;
+  line-height: 24px;
+  background: var(--dsw-alias-interactive-bg-hover);
+  border-bottom: 1px solid var(--dsw-alias-border-l2);
+}
+
+/* Like every path in this row, the title bar's path opens the file. */
+.diffPath {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--dsw-alias-label-secondary);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.diffPath:hover {
+  color: var(--dsw-alias-label-primary);
+}
+
+.diffName {
+  flex: 0 1 auto;
+  color: var(--dsw-alias-label-primary);
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.diffDir {
+  flex: 1 1 auto;
+  min-width: 0;
+  color: var(--dsw-alias-label-tertiary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* The title bar's collapse control, the chip toggle's sibling. */
+.diffCollapse {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  margin: 0;
+  padding: 0 6px;
+  border: none;
+  background: transparent;
+  color: var(--dsw-alias-label-tertiary);
+  cursor: pointer;
+}
+
+.diffCollapse:hover {
+  color: var(--dsw-alias-label-secondary);
+  background: var(--dsw-alias-interactive-bg-hover);
+}
+
+/* The primitive's own card chrome (margin, radius) belongs to the tool rows;
+   the panel's container clips and frames the body instead. */
+.diffBody {
+  margin: 0;
+}
+
+@keyframes produced-diff-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .diff {
+    animation: none;
+  }
+}
+
+/* Overflow count: rare with multi-line wrap; shown only when path count
+   exceeds the cap. */
+.more {
+  flex: 0 0 auto;
+  white-space: nowrap;
+  color: var(--dsw-alias-label-tertiary);
+}
+
+.showFolder {
+  grid-column: 2;
+  justify-self: start;
+  margin: 0;
+  padding: 0 2px;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--dsw-alias-label-tertiary);
+  font: inherit;
+  line-height: 20px;
+  cursor: pointer;
+}
+
+.showFolder:hover {
+  color: var(--dsw-alias-label-secondary);
+  text-decoration: underline;
+}
+
+/* Exact browser-native probes for every candidate shown count. They share the
+   visible styles but never affect layout, accessibility, or scroll width. */
+.measure {
+  position: absolute;
+  width: 0;
+  height: 0;
+  overflow: hidden;
+  visibility: hidden;
+  pointer-events: none;
+  contain: strict;
+}
+
+.probe {
+  position: absolute;
+  inset: 0 auto auto 0;
+  width: max-content;
+}

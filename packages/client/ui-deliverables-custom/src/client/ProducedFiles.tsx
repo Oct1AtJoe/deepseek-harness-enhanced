@@ -2,11 +2,11 @@
 // come pre-matched by the turn-tail chain from the mutation tools'
 // follow-along locations, never from the closing prose. Clicking a chip's
 // name goes through the same openFile the tool rows use — the Host's own
-// opener, on the Host machine. A chip whose file this conversation changed
-// carries the +/- line totals next to its name and a chevron that expands
-// the change itself (the same diff primitive the tool rows draw).
+// opener, on the Host machine. The row wraps to multiple lines when chips
+// overflow the available width, so all files remain visible without
+// single-line truncation.
 
-import { useLayoutEffect, useRef, useState } from 'react'
+import { useState } from 'react'
 import type { HostDescriptionSource } from '@deepseek-ai/dsh-client-connection/client'
 import type { InjectFace, PropsLocale } from '@deepseek-ai/dsh-client-ui-slots'
 import { IconChevronDownOutline14, IconChevronUpOutline14 } from '@deepseek-ai/dsh-client-ui-primitives'
@@ -16,8 +16,10 @@ import { basename, diffStats, dirname, type ProducedFileMatch } from './turn-del
 import type { NS } from './locales.ts'
 import css from './ProducedFiles.module.css'
 
-/** At most six chips compete for the one-line summary; every other path stays counted. */
-const SHOWN_LIMIT = 6
+/** Cap for produced-file chips. The row wraps to multiple lines, so this
+ *  limit exists mainly to bound measurement and prevent pathological counts;
+ *  30 covers all realistic single-turn file sets. */
+const SHOWN_LIMIT = 30
 
 /**
  * Select the largest prefix whose measured chips and exact remainder fit.
@@ -136,43 +138,9 @@ export function ProducedFiles({
 }: ProducedFilesProps) {
   const hostCanOpenPath = useHostDescription(description => description?.canOpenPath === true)
   const canOpenPath = isLoopback && hostCanOpenPath
-  const limit = Math.min(paths.length, SHOWN_LIMIT)
-  const [shownCount, setShownCount] = useState(limit)
   const [expandedPath, setExpandedPath] = useState<string | null>(null)
-  const rowRef = useRef<HTMLDivElement>(null)
-  const chipProbes = useRef<Array<HTMLSpanElement | null>>([])
-  const moreProbe = useRef<HTMLSpanElement>(null)
 
-  useLayoutEffect(() => {
-    const row = rowRef.current
-    const remainderProbe = moreProbe.current
-    /* v8 ignore next -- React attaches both refs before the layout effect runs. */
-    if (row === null || remainderProbe === null) return
-    const measure = (): void => {
-      const styles = getComputedStyle(row)
-      const gap = Number.parseFloat(styles.columnGap || styles.gap) || 0
-      // React attaches every still-mounted callback ref before layout effects run.
-      const activeChipProbes = chipProbes.current.slice(0, limit) as HTMLSpanElement[]
-      const chips = activeChipProbes.map(probe => probe.getBoundingClientRect().width)
-      const more = Array.from({ length: limit + 1 }, (_, candidate) => {
-        if (paths.length === candidate) return undefined
-        remainderProbe.textContent = moreLabel(t, paths.length - candidate)
-        return remainderProbe.getBoundingClientRect().width
-      })
-      setShownCount(fitProducedFiles(row.clientWidth, gap, chips, more))
-    }
-    measure()
-    if (typeof ResizeObserver === 'undefined') return
-    const observer = new ResizeObserver(measure)
-    observer.observe(row)
-    for (const probe of [...chipProbes.current, moreProbe.current]) {
-      if (probe !== null) observer.observe(probe)
-    }
-    return () => { observer.disconnect() }
-  }, [limit, paths, t])
-
-  const visibleCount = Math.min(shownCount, limit)
-  const shown = paths.slice(0, visibleCount)
+  const shown = paths.slice(0, SHOWN_LIMIT)
   const hidden = paths.length - shown.length
   const expanded = paths.find(match => match.path === expandedPath) ?? null
 
@@ -220,7 +188,7 @@ export function ProducedFiles({
   return (
     <div className={css.root}>
       <span className={css.label}>{t('produced.label')}</span>
-      <div ref={rowRef} className={css.row} data-produced-files-row>
+      <div className={css.row} data-produced-files-row>
         {shown.map(chip)}
         {hidden > 0 && <span className={css.more}>{moreLabel(t, hidden)}</span>}
       </div>
@@ -232,36 +200,11 @@ export function ProducedFiles({
           close={() => { setExpandedPath(null) }}
         />
       )}
-      {hidden > 0 && canOpenPath && (
+      {paths.length > 0 && canOpenPath && (
         <button type="button" className={css.showFolder} onClick={() => { openFile('.') }}>
           {t('produced.showInFolder')}
         </button>
       )}
-      <div className={css.measure} aria-hidden="true">
-        {paths.slice(0, limit).map((match, index) => {
-          const stats = diffStats(match.totalHunks)
-          return (
-            <span
-              key={match.path}
-              ref={(node) => { chipProbes.current[index] = node }}
-              className={`${css.chip} ${css.probe}`}
-            >
-              <button type="button" tabIndex={-1} className={css.file}>
-                {basename(match.path)}
-              </button>
-              {match.totalHunks.length > 0 && (
-                <>
-                  <Stats added={stats.added} removed={stats.removed} />
-                  {match.hunks.length > 0 && (
-                    <span className={css.toggle}><IconChevronDownOutline14 size={12} /></span>
-                  )}
-                </>
-              )}
-            </span>
-          )
-        })}
-        <span ref={moreProbe} className={`${css.more} ${css.probe}`} />
-      </div>
     </div>
   )
 }

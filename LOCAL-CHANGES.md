@@ -130,6 +130,48 @@ ctx.effect(() => {
 
 ---
 
+## 3. Fix: 主进程 SetErrorMode + 补充 WER 排除列表
+
+**问题**：上一轮修复仅在 runner（沙箱子进程）中设置 `SetErrorMode(SEM_NOGPFAULTERRORBOX)`，
+但未在 DSH 主进程（Node.js 服务器）中设置。当 pwsh 7 的 .NET 运行时启动时可能清除继承的
+错误模式，导致 `where.exe`/`winget.exe`/`git.exe` 等孙子进程的 CRT "Application Error" 弹窗
+无法被抑制。
+
+另外 WER `ExcludedApplications` 列表中缺少 `where.exe` 和 `winget.exe`，
+导致它们在崩溃时仍然弹出 WER 对话框。
+
+### 修改文件
+
+#### `packages/sandbox/sandbox-windows-acl/src/index.ts`
+
+在模块加载时同步调用 `SetErrorMode(SEM_NOGPFAULTERRORBOX | SEM_FAILCRITICALERRORS)`，
+使主 DSH 进程及其所有子进程（runner → pwsh → where.exe/winget.exe）都继承错误模式抑制。
+
+```typescript
+// 新增 import
+import { ... , win32Sync } from './ffi.ts'
+
+// 模块级调用（在 import 之后、class 定义之前）：
+if (process.platform === 'win32') {
+  try {
+    win32Sync().setErrorMode(abi.SEM_NOGPFAULTERRORBOX | abi.SEM_FAILCRITICALERRORS)
+  } catch {
+    // koffi 不可用时静默失败
+  }
+}
+```
+
+#### `packages/sandbox/sandbox-policy/src/index.ts`
+
+在 WER ExcludedApplications 列表中补充 `where.exe` 和 `winget.exe`。
+
+```diff
+- const excludedExes = ['node.exe', 'cmd.exe', 'powershell.exe', 'pwsh.exe', 'git.exe']
++ const excludedExes = ['node.exe', 'cmd.exe', 'powershell.exe', 'pwsh.exe', 'git.exe', 'where.exe', 'winget.exe']
+```
+
+---
+
 ## 重建
 
 ```sh
@@ -144,4 +186,5 @@ pnpm run build:lib
 
 ```
 214ee4f8bf feat: add 4 glassmorphism themes + crash-dialog fix
+（本轮修复尚未提交）
 ```
