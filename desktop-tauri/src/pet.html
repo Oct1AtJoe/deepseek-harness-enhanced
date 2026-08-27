@@ -19,6 +19,38 @@ html, body {
   -webkit-app-region: drag;
   cursor: default;
 }
+#pet-bubble {
+  position: fixed;
+  bottom: calc(100% - 20px);
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(22, 27, 34, 0.95);
+  border: 1px solid #30363d;
+  border-radius: 8px;
+  padding: 10px 14px;
+  min-width: 160px;
+  max-width: 260px;
+  flex-direction: column;
+  gap: 4px;
+  cursor: pointer;
+  z-index: 100;
+  pointer-events: auto;
+  -webkit-app-region: no-drag;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+}
+#pet-bubble strong {
+  font-size: 13px;
+  color: #58a6ff;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+#pet-bubble span {
+  font-size: 12px;
+  color: #c9d1d9;
+  line-height: 1.4;
+  word-break: break-word;
+}
 </style>
 </head>
 <body>
