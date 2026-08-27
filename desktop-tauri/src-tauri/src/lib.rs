@@ -910,7 +910,7 @@ fn register_aumid() {
 /// 每次启动重写，保证便携版挪动后快捷方式仍指向最新 exe。
 fn ensure_shortcut() {
     use windows::core::*;
-    use windows::Win32::System::Com::StructuredStorage::PROPVARIANT;
+    use windows::core::PROPVARIANT;
     use windows::Win32::System::Com::{
         CoCreateInstance, CoInitializeEx, CoUninitialize, CLSCTX_INPROC_SERVER,
         COINIT_APARTMENTTHREADED, IPersistFile,

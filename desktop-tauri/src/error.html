@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>启动失败 - DeepSeek Harness</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  background: #0d1117;
+  color: #c9d1d9;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100vh;
+  padding: 24px;
+}
+.card {
+  background: #161b22;
+  border: 1px solid #30363d;
+  border-radius: 8px;
+  padding: 32px;
+  max-width: 480px;
+  text-align: center;
+}
+h1 { font-size: 20px; margin-bottom: 12px; }
+p { font-size: 14px; color: #8b949e; line-height: 1.6; }
+.icon { font-size: 48px; margin-bottom: 16px; }
+</style>
+</head>
+<body>
+<div class="card">
+  <div class="icon">⚠️</div>
+  <h1>启动失败</h1>
+  <p id="message">无法启动 DeepSeek Harness 服务。请检查 Node.js 安装或查看日志。</p>
+</div>
+<script>
+const params = new URLSearchParams(location.search);
+const reason = params.get('reason');
+const msgs = {
+  'not-found': '未找到 dsh 命令。请执行 <code>npm i -g @deepseek-ai/dsh</code> 安装。',
+  'spawn-failed': 'dsh 进程启动失败，详见日志。',
+  'timeout': '等待本地服务就绪超时，详见日志。',
+};
+if (reason && msgs[reason]) {
+  document.getElementById('message').innerHTML = msgs[reason];
+}
+</script>
+</body>
+</html>
