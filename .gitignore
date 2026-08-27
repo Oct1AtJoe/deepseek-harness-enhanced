@@ -42,6 +42,9 @@ worktrees/
 .typert-*/
 desktop-tauri/dist/
 desktop-tauri/src-tauri/target/
+desktop-tauri/src-tauri/gen/
+desktop-tauri/package-lock.json
+desktop-tauri/src-tauri/Cargo.lock
 logs/
 .dsh-filess/
 packages/context/session-reference/src/types.*
