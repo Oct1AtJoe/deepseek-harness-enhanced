@@ -16,7 +16,12 @@ function isBuildFaceClient(value: unknown): boolean {
 export default defineConfig(({ env }) => {
   const client = isBuildFaceClient(env?.DSH_BUILD_FACE)
   return {
-    workspace: ['vendor/*', 'packages/*/*', 'apps/cli'],
+    // kanye-pet has its own build system (esbuild scripts) and no TypeScript
+    // source; exclude it from the tsdown workspace to avoid entry resolution.
+    workspace: {
+      include: ['vendor/*', 'packages/*/*', 'apps/cli'],
+      exclude: ['**/kanye-pet'],
+    },
     entry: client ? '' : ['lib/types/{index,invariant,startup}.js'],
     outDir: 'lib',
     format: ['esm'],
