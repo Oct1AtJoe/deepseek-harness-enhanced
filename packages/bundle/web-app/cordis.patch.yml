@@ -125,10 +125,6 @@
         host: !!js ctx.webStartup.host ?? '127.0.0.1'
         port: !!js ctx.webStartup.port ?? 3080
 
-    # Built-in desktop pet (kanye-pet): Node half serves
-    # state/assets/config/SSE for the Tauri desktop pet window.
-    - id: kanye-pet
-      name: '@deepseek-ai/dsh-kanye-pet'
     # Web glue owned by this bundle: resolves the built frontend dist (an
     # assembly fact of dsh-web-app, never user config), mounts the
     # frontend-static fallback owner, registers the web-surface prompt
@@ -297,62 +293,6 @@
 
     - id: ui-trajectory
       name: '@deepseek-ai/dsh-client-ui-trajectory'
-
-# ── local customization roster (forked plugins) ────────────────────────────
-# The forked copies replace the official rows they fork: the official
-# deliverable/subagent rows are disabled so the custom copies own their slots.
-# Every forked package lives in this repository (packages/client, packages/host)
-# and is declared in this bundle's package.json, so a fresh checkout boots the
-# same surface without any local profile edits.
-
-- id: ui-deliverables
-  disabled: true
-
-- id: ui-subagent
-  disabled: true
-
-- insert:
-    # ui-session-reference: 浏览器 '@' 源（官方 bundle 已有 session-reference 行）。
-    - id: ui-session-reference
-      name: '@deepseek-ai/dsh-client-ui-session-reference'
-
-    # Produced-files rows (+N -M counts + download panel); forks ui-deliverables.
-    - id: ui-deliverables-custom
-      name: '@deepseek-ai/dsh-client-ui-deliverables-custom'
-
-    # Retry a failed round: re-submit the turn that ended in error.
-    - id: ui-resend-failed-round
-      name: '@deepseek-ai/dsh-client-ui-resend-failed-round'
-
-    # Subagent list without the top conversation.view tab; opens the sidebar tab.
-    - id: ui-subagent-custom
-      name: '@deepseek-ai/dsh-client-ui-subagent-custom'
-
-    # Desktop notifications; forks the marketplace dsh-notification.
-    - id: dsh-notification-custom
-      name: '@deepseek-ai/dsh-notification-custom'
-
-    # aurora/nebula themes registered via ctx.theme.register.
-    - id: ui-theme-custom
-      name: '@deepseek-ai/dsh-client-ui-theme-custom'
-
-    # Skill management: Remote + the Web settings sections.
-    - id: skill-manager
-      name: '@deepseek-ai/dsh-host-skill-manager'
-
-    - id: ui-settings-skills
-      name: '@deepseek-ai/dsh-client-ui-settings-skills'
-
-    - id: ui-settings-subagents
-      name: '@deepseek-ai/dsh-client-ui-settings-subagents'
-
-    # Subagent backend management: Remote directory (list/install/remove/update).
-    - id: subagent-manager
-      name: '@deepseek-ai/dsh-host-subagent-manager'
-
-    # Conversation node navigation rail; forks the marketplace dsh-plugin-msg-nav.
-    - id: ui-msg-nav
-      name: '@deepseek-ai/dsh-client-ui-msg-nav'
 
 # ── the agent plane moves behind agent presets ─────────────────────────────
 #
