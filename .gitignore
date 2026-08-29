@@ -47,4 +47,5 @@ desktop-tauri/package-lock.json
 desktop-tauri/src-tauri/Cargo.lock
 logs/
 .dsh-filess/
+.dsh-vision-router/
 packages/context/session-reference/src/types.*
