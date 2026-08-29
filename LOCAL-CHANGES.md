@@ -172,6 +172,32 @@ if (process.platform === 'win32') {
 
 ---
 
+## 4. Chore: 清理 fork 内 ecosystem 残留（dead mappings + 重复 msg-nav 包）
+
+**背景**：自定义插件已全部提取到 `C:\dsh-ecosystem\plugins\`，由 web profile 通过 pnpm
+`link:` 依赖加载。仓库内残留的 TypeScript path mappings 指向不存在的目录（dead
+reference），且 `packages/client/ui-msg-nav` 与生态版 src 完全重复（运行时装载的是生态版）。
+
+### 修改
+
+- `tsconfig.base.json`：删除 7 条 ecosystem path mappings
+  （ui-theme-custom / ui-session-reference / ui-deliverables-custom / ui-resend-failed-round /
+  ui-subagent-custom / dsh-notification-custom / ui-msg-nav）。`lib: ["esnext", ...]`
+  功能补丁保留。
+- 删除 `packages/client/ui-msg-nav/`（src 与 `C:\dsh-ecosystem\plugins\ui-msg-nav` 完全一致）。
+- `.gitignore` 的 `desktop-tauri/*`、`packages/data/kanye-pet/state.json` 等条目**保留**：
+  对应目录仍以未跟踪形式存在于本地工作树（构建产物 / 运行时数据），条目正在服务。
+
+### Profile 侧变化（不在本仓库）
+
+- `~/.dsh/profiles/web/package.json`：9 个自定义插件依赖从 `file:` 改为 pnpm 原生 `link:`
+  协议；`postinstall` 与 `C:\dsh-ecosystem\ensure-junctions.js` 已删除——`pnpm install`
+  不再破坏插件链接。
+- 生态 `C:\dsh-ecosystem\plugins\package.json` 补充 Node-half 插件运行时依赖
+  （schemastery / zod / @deepseek-ai/schemastery，symlink 包从真实路径解析）与 tsdown 构建依赖。
+
+---
+
 ## 重建
 
 ```sh
