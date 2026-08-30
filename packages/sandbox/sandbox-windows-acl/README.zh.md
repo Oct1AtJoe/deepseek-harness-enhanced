@@ -83,6 +83,7 @@ koffi 结构体定义在模块加载时对照探针断言其大小，因此头�
 - **环境临时根目录绝不会被隐式授权。** 直接使用 `AclSandbox` 的 workspace-write 调用方必须提供一个已存在的私有 `tempDir` 及其不同的 `tempWriteSid`，或通过 `tempDir: null` 显式禁用临时写入。实际临时目录不得与任何可写根目录重叠。seam 会创建随机私有目录；无 agent runner 调用把 `--temp` 视为父根目录并自行创建随机子目录，但如果工作区等于或包含该父根目录，就会在任何 ACL 改动前拒绝调用。
 - **受限子进程的临时能力按每个活跃的会话/工作区对私有。** runner 在 spawn 之前用 `SetEnvironmentVariableW` 把 TMP/TEMP 改写为该私有目录，子进程继承改写后的环境块（bwrap `--tmpfs /tmp` 的语义）。临时 ACE 与目录会在提供方 dispose 时移除，或在每次无 agent 调用后移除。崩溃可能留下失效的 `%TEMP%` 垃圾，但恢复后的提供方会选择新的随机路径和 SID，而不会与残留发生冲突或重新向其授权。原生 runner 套件证明，共享同一工作区 SID 的两个令牌无法写入彼此的临时目录。
 - **受限令牌下 `whoami` 与令牌检查 cmdlet 会失败。** 子进程对复制令牌的 `GetTokenInformation` 部分不可用，因此 `whoami /all` 报错——这是限制方案的诊断噪音，不是运行故障；真正重要的拒绝面（文件写入）不受影响。
+- **崩溃对话框抑制是两位一体的继承契约。** runner 设置 `SEM_NOGPFAULTERRORBOX | SEM_FAILCRITICALERRORS` 并在不带 `CREATE_DEFAULT_ERROR_MODE` 的情况下 spawn，因此每个受限后代都继承这两位。`SetErrorMode` 是替换而非按位或——只重设其中一位会把整棵进程树降为一位，为初始化失败的 hard error 重新打开弹窗窗口，所以必须成对保留。Windows Error Reporting 的对话框由 `dsh-sandbox-policy` 的注册表键（`DontShowUI` + `ExcludedApplications`）另行抑制。
 
 ## 模型体验
 

@@ -125,7 +125,8 @@ export function spawnSandboxed(
     token, null, commandLine,
     null, null,
     1, // bInheritHandles: required for redirection
-    0, // no CREATE_DEFAULT_ERROR_MODE → child inherits SEM_NOGPFAULTERRORBOX (no-window variants unusable under restriction)
+    // No CREATE_DEFAULT_ERROR_MODE: the child inherits both suppression bits.
+    0,
     null, options.cwd,
     startupInfo, processInfo,
   )
@@ -309,7 +310,9 @@ export function spawnSandboxedInherited(
     token, null, commandLine,
     null, null,
     1, // bInheritHandles: the re-enabled std handles must be inheritable
-    abi.CREATE_SUSPENDED, // suspended for job assignment; no CREATE_DEFAULT_ERROR_MODE → child inherits SEM_NOGPFAULTERRORBOX
+    // Suspended for job assignment; no CREATE_DEFAULT_ERROR_MODE: the child
+    // inherits both suppression bits.
+    abi.CREATE_SUSPENDED,
     null, options.cwd,
     startupInfo, processInfo,
   )

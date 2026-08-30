@@ -52,12 +52,17 @@ import * as abi from './win32-abi.ts'
 import { AclSandbox, assertTempRootOutsideWorkspace } from './index.ts'
 import { tempWriteSid, workspaceWriteSid } from './workspace-sid.ts'
 
-// Set SEM_NOGPFAULTERRORBOX at MODULE load time, synchronously, before main()
-// runs or any import can throw. This way crash-dialog suppression is active
-// even when the runner fails during module loading (e.g. a later import's
-// native binding crashes). win32Sync() returns the cached FFI table; calling
-// it again in main() is idempotent.
-win32Sync().setErrorMode(abi.SEM_NOGPFAULTERRORBOX)
+// Set SEM_NOGPFAULTERRORBOX | SEM_FAILCRITICALERRORS at MODULE load time,
+// synchronously, before main() runs or any import can throw. This way
+// crash-dialog suppression is active even when the runner fails during module
+// loading (e.g. a later import's native binding crashes). SetErrorMode is a
+// REPLACE, not an OR: passing only SEM_NOGPFAULTERRORBOX would clear the
+// SEM_FAILCRITICALERRORS bit inherited from the server, breaking its
+// process-tree-wide suppression (children created without
+// CREATE_DEFAULT_ERROR_MODE inherit exactly this process's mode).
+// win32Sync() returns the cached FFI table; calling it again in main() is
+// idempotent.
+win32Sync().setErrorMode(abi.SEM_NOGPFAULTERRORBOX | abi.SEM_FAILCRITICALERRORS)
 
 const RUNNER_SIGNATURE = 'windows-acl-run'
 const RUNNER_FAILURE_EXIT = 127
@@ -140,9 +145,12 @@ async function main(): Promise<number> {
 
   const api = await win32()
   // Suppress Windows "Application Error" dialogs for spawn failures under the
-  // restricted token. Omit CREATE_DEFAULT_ERROR_MODE when spawning so the child
-  // naturally inherits this error mode — and, by default, its own children inherit it too.
-  api.setErrorMode(abi.SEM_NOGPFAULTERRORBOX)
+  // restricted token. Both bits again (replace semantics, see module load):
+  // omitting CREATE_DEFAULT_ERROR_MODE at spawn makes the confined child
+  // inherit exactly this process's mode — and, by default, its own children
+  // inherit it too, so the server's two suppression bits survive the whole
+  // confined tree instead of degrading to one here.
+  api.setErrorMode(abi.SEM_NOGPFAULTERRORBOX | abi.SEM_FAILCRITICALERRORS)
   // Ignore this process's own CTRL+C: the confined child (same console) keeps
   // handling its own; the runner must survive to revoke grants and mirror the
   // child's exit code.

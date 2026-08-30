@@ -293,8 +293,29 @@ describe.skipIf(!isWin32 || !pwshAvailable())('windows-acl runner', () => {
     expect(existsSync(marker)).toBe(false)
   }, 15_000)
 
-  it('confined children spawn grandchildren with inherited stdio; piped capture stays denied (named-pipe default SD template)', () => {
-    // Two-layer pin of the grandchild-spawn boundary:
+  it('runner keeps BOTH suppression bits (SEM_NOGPFAULTERRORBOX | SEM_FAILCRITICALERRORS) in the confined tree', () => {
+    // SetErrorMode is a REPLACE, not an OR: a runner that re-set only
+    // SEM_NOGPFAULTERRORBOX would downgrade the SEM_FAILCRITICALERRORS bit
+    // inherited from the server, and children created without
+    // CREATE_DEFAULT_ERROR_MODE inherit exactly the runner's mode — the
+    // process-tree-wide dialog suppression would silently shrink at this
+    // hop. GetErrorMode reads the confined child's actual mode back.
+    const probe = "const koffi=require('koffi');const k=koffi.load('kernel32.dll');const g=k.func('__stdcall','GetErrorMode','uint32',[]);console.log('ERROR-MODE: 0x'+g().toString(16))"
+    const result = runRunner([
+      '--workspace', writableDir, '--temp', isolatedTemp, '--mode', 'read-only',
+      '--', process.execPath, '-e', probe,
+    ])
+    expect(result.status, `stderr: ${result.stderr}`).toBe(0)
+    const match = /ERROR-MODE: 0x([0-9a-f]+)/u.exec(result.stdout)
+    const reportedMode = match?.[1]
+    expect(reportedMode, `stdout: ${result.stdout}`).toBeDefined()
+    // 0x3 = SEM_FAILCRITICALERRORS | SEM_NOGPFAULTERRORBOX. GetErrorMode also
+    // reports SEM_NOOPENFILEERRORBOX (0x8000), a legacy always-set bit on
+    // modern Windows regardless of what SetErrorMode wrote — mask it off.
+    expect(Number.parseInt(reportedMode as string, 16) & 0x3).toBe(0x3)
+  }, 30_000)
+
+  it('confined children spawn grandchildren with inherited stdio; piped capture stays denied (named-pipe default SD template)', () => {    // Two-layer pin of the grandchild-spawn boundary:
     //  - the token default DACL carries a restricting-SID ACE (set in init),
     //    so ANONYMOUS pipe creation (CreatePipe — the token-default-DACL
     //    consumer) works and inherited/ignored stdio spawns succeed;
