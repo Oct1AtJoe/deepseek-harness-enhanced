@@ -1,0 +1,211 @@
+diff --git a/.agents/notes/implemented/bug-fix/2026-08-29-windows-acl-error-mode-suppression-pair.i18n.yaml b/.agents/notes/implemented/bug-fix/2026-08-29-windows-acl-error-mode-suppression-pair.i18n.yaml
+new file mode 100644
+index 0000000000..c19ab29636
+--- /dev/null
++++ b/.agents/notes/implemented/bug-fix/2026-08-29-windows-acl-error-mode-suppression-pair.i18n.yaml
+@@ -0,0 +1,6 @@
++# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
++# side as of the last confirmed-consistent state. Both languages carry equal authority;
++# after editing either side, bring the other along and re-record with:
++#   pnpm run verify-translation-pairing --write .agents/notes/implemented/bug-fix/2026-08-29-windows-acl-error-mode-suppression-pair.md
++2026-08-29-windows-acl-error-mode-suppression-pair.md: bc5453916537854f04664ab489e2930ca5274c43
++2026-08-29-windows-acl-error-mode-suppression-pair.zh.md: d089e11919c9db768ff517a25f24ddd8d10ee551
+diff --git a/.agents/notes/implemented/bug-fix/2026-08-29-windows-acl-error-mode-suppression-pair.md b/.agents/notes/implemented/bug-fix/2026-08-29-windows-acl-error-mode-suppression-pair.md
+new file mode 100644
+index 0000000000..bc54539165
+--- /dev/null
++++ b/.agents/notes/implemented/bug-fix/2026-08-29-windows-acl-error-mode-suppression-pair.md
+@@ -0,0 +1,29 @@
++# Agent Note: Keep both error-mode suppression bits through the Windows ACL runner
++
++Status: implemented
++
++English | [中文](2026-08-29-windows-acl-error-mode-suppression-pair.zh.md)
++
++## Problem
++
++A desktop deployment reported that under the `workspace-write` session policy commands succeed while a `cmd.exe` "Application Error" dialog appears on the desktop. The crash surfaces carry no WER event, no reliability record, and no ReportArchive entry, which identifies the dialog as the CSRSS hard-error box for process-initialization failure (`0xC0000142`-class) rather than a WER-reported crash. Two suppression layers already exist — the inherited `SetErrorMode` bits and the `dsh-sandbox-policy` registry keys (`DontShowUI` + `ExcludedApplications`, verified present on the host) — and the dialog still appeared, so the WER layer cannot reach this box and the error-mode layer was the remaining candidate.
++
++The server sets `SEM_NOGPFAULTERRORBOX | SEM_FAILCRITICALERRORS` at startup (`dsh-sandbox-windows-acl/src/index.ts`), and children created without `CREATE_DEFAULT_ERROR_MODE` inherit the caller's current mode. But `SetErrorMode` is a replace, not an OR: the runner re-set only `SEM_NOGPFAULTERRORBOX` at module load and again in `main()`, which cleared the inherited `SEM_FAILCRITICALERRORS` bit. Every confined child then inherited a one-bit mode — the process-tree-wide suppression the server intended was silently downgraded at exactly the hop that spawns the confined tree.
++
++## Decision
++
++Both runner `setErrorMode` call sites now set `SEM_NOGPFAULTERRORBOX | SEM_FAILCRITICALERRORS` together, with the replace semantics documented at each site; the spawn sites' inheritance comments name both bits. The runner suite pins the contract end to end: a confined child reads its own mode back through `GetErrorMode` (koffi) and the assertion masks off `SEM_NOOPENFILEERRORBOX`, which modern Windows always reports regardless of what `SetErrorMode` wrote. The package README records the two-bit inherited contract beside the other verified boundaries.
++
++A targeted experiment with the empirically always-failing form (restricted token + `CREATE_NO_WINDOW`, the win32-abi-documented `0xC0000142` shape) died silently under both candidate modes on the investigation host, so the fix is proven to restore the intended suppression surface, not yet proven to remove the reporter's dialog: that dialog's exact trigger lives inside an arbitrary command chain's derived `cmd.exe` and did not reproduce in console-host, no-console-host, or probe shapes. The repair closes the one defect the evidence did establish; if a dialog still appears on the desktop, the next datum needed is the exact command that triggers it.
++
++## Alternatives considered
++
++**Rely on the WER registry layer.** Already active (`DontShowUI=1`, `cmd.exe` excluded, verified on the host) and demonstrably insufficient: the dialog left no WER trace at all, so the hard-error path bypasses WER entirely.
++
++**Pass `CREATE_DEFAULT_ERROR_MODE`.** Rejected: the child would take the system default mode instead of inheriting the caller's bits, losing even `SEM_NOGPFAULTERRORBOX` and widening the dialog window rather than narrowing it.
++
++**Fix the triggering command.** Rejected for now: the `cmd.exe` is derived by the executed command chain (`.cmd`/`.bat` shims, internal `cmd /c` calls), which the harness does not control; the error-mode contract is the one layer that covers every such descendant.
++
++## Consequences
++
++The confined process tree keeps both suppression bits end to end, and the suite fails if a future runner change downgrades the mode again. Dialogs outside the two bits' coverage — if any reach the desktop — need their own trigger identified before they can be suppressed further; the investigation artifacts (WER registry state, event-log absence, reproduction shapes) are recorded here as the baseline for that follow-up.
+diff --git a/.agents/notes/implemented/bug-fix/2026-08-29-windows-acl-error-mode-suppression-pair.zh.md b/.agents/notes/implemented/bug-fix/2026-08-29-windows-acl-error-mode-suppression-pair.zh.md
+new file mode 100644
+index 0000000000..d089e11919
+--- /dev/null
++++ b/.agents/notes/implemented/bug-fix/2026-08-29-windows-acl-error-mode-suppression-pair.zh.md
+@@ -0,0 +1,29 @@
++# Agent Note: 让两位错误模式抑制位贯通 Windows ACL runner
++
++Status: implemented
++
++[English](2026-08-29-windows-acl-error-mode-suppression-pair.md) | 中文
++
++## 问题
++
++桌面部署报告：`workspace-write` 会话策略下命令执行成功，但桌面弹出 `cmd.exe`"应用程序错误"对话框。这些崩溃面没有留下任何 WER 事件、可靠性记录或 ReportArchive 条目——据此可判定该对话框是进程初始化失败（`0xC0000142` 一族）的 CSRSS hard-error 框，而非 WER 接管的崩溃。两层抑制机制原本已在位——继承的 `SetErrorMode` 位，以及 `dsh-sandbox-policy` 的注册表键（宿主上已验证存在 `DontShowUI` + `ExcludedApplications`）——而对话框仍然出现：WER 层够不到这个框，错误模式层成为剩余嫌疑。
++
++服务端在启动时设置 `SEM_NOGPFAULTERRORBOX | SEM_FAILCRITICALERRORS`（`dsh-sandbox-windows-acl/src/index.ts`），不带 `CREATE_DEFAULT_ERROR_MODE` 创建的子进程继承调用者的当前模式。但 `SetErrorMode` 是替换而非按位或：runner 在模块加载时和 `main()` 里都只重设了 `SEM_NOGPFAULTERRORBOX`，把继承来的 `SEM_FAILCRITICALERRORS` 位清掉了。于是每个受限子进程继承到的是单位模式——服务端意图中的全进程树抑制，恰好在启动受限树的这一跳被静默降级。
++
++## 决策
++
++runner 的两处 `setErrorMode` 调用点现在成对设置 `SEM_NOGPFAULTERRORBOX | SEM_FAILCRITICALERRORS`，并在每处注明替换语义；spawn 点的继承注释同时点名两位。runner 套件端到端钉住该契约：受限子进程通过 koffi 调 `GetErrorMode` 读回自身模式，断言掩掉 `SEM_NOOPENFILEERRORBOX`——现代 Windows 无论 `SetErrorMode` 写了什么都恒报该位。包 README 在其余已验证边界旁记录了这个两位继承契约。
++
++一次针对性实验采用经验上必然失败的形态（受限令牌 + `CREATE_NO_WINDOW`，即 win32-abi 记录的 `0xC0000142` 形态）在调查主机上于两种候选模式下都静默死亡，因此本修复已被证明能恢复预期的抑制面，但尚未被证明能消除报告者的弹窗：那个弹窗的确切触发点位于任意命令链派生的 `cmd.exe` 内部，在控制台宿主、无控制台宿主、探测形态下均未复现。本修复关闭了证据确实确立的那一个缺陷；如果桌面仍出现弹窗，需要的下一个数据是触发它的确切命令。
++
++## 备选方案
++
++**依赖 WER 注册表层。** 已处于激活状态（宿主上验证过 `DontShowUI=1`、`cmd.exe` 在排除列表）且明显不足：该弹窗没有留下任何 WER 痕迹，hard-error 路径完全绕过 WER。
++
++**传 `CREATE_DEFAULT_ERROR_MODE`。** 拒绝：子进程将取系统默认模式而非继承调用者的位，连 `SEM_NOGPFAULTERRORBOX` 都会失去，弹窗窗口反而变宽而非收窄。
++
++**修复触发命令。** 暂不采纳：`cmd.exe` 由被执行的命令链派生（`.cmd`/`.bat` shim、内部 `cmd /c` 调用），harness 无法控制；错误模式契约是覆盖所有此类后代的唯一一层。
++
++## 后果
++
++受限进程树端到端保住两位抑制位；若未来 runner 改动再次降级模式，套件会失败。两位覆盖之外的对话框——如果仍能到达桌面——需要先定位其触发点才能进一步抑制；调查产物（WER 注册表状态、事件日志缺席、复现形态）记录于此，作为后续跟进的基线。
+diff --git a/packages/sandbox/sandbox-windows-acl/README.md b/packages/sandbox/sandbox-windows-acl/README.md
+index a78f334342..ea1a55d4e5 100644
+--- a/packages/sandbox/sandbox-windows-acl/README.md
++++ b/packages/sandbox/sandbox-windows-acl/README.md
+@@ -81,6 +81,7 @@ The koffi struct definitions assert their sizes against the probe at module load
+ - **The ambient temp root is never granted implicitly.** A direct `AclSandbox` workspace-write caller must supply an existing private `tempDir` plus its distinct `tempWriteSid`, or explicitly disable temp writes with `tempDir: null`. The actual temp directory must be disjoint from every writable root. The seam creates a random private directory; agentless runner calls treat `--temp` as the parent root and create their own random child, but reject a workspace equal to or containing that parent before any ACL mutation.
+ - **The confined child's temp capability is private per live session/workspace pair.** The runner rewrites TMP/TEMP via `SetEnvironmentVariableW` to that private directory before the spawn and the child inherits the rewritten block (bwrap `--tmpfs /tmp` semantics). The temp ACE and directory are removed on provider disposal, or after each agentless invocation. A crash can leave inert `%TEMP%` litter, but a resumed provider chooses a new random path and SID instead of colliding with or reauthorizing the residue. The native runner suite proves that two tokens sharing the same workspace SID cannot write one another's temp directories.
+ - **`whoami` and token-inspection cmdlets fail under the restricted token.** `GetTokenInformation` on the duplicate is partially unavailable to the child, so `whoami /all` reports errors — diagnostic noise of the restriction scheme, not an operational failure; the denial surfaces that matter (file writes) are unaffected.
++- **Crash-dialog suppression is a two-bit inherited contract.** The runner sets `SEM_NOGPFAULTERRORBOX | SEM_FAILCRITICALERRORS` and spawns without `CREATE_DEFAULT_ERROR_MODE`, so every confined descendant inherits both bits. `SetErrorMode` is a replace, not an OR — re-setting only one bit downgrades the tree to one bit and re-opens the dialog window for initialization-failure hard errors, so keep the pair. Windows Error Reporting dialogs are separately suppressed by `dsh-sandbox-policy`'s registry keys (`DontShowUI` + `ExcludedApplications`).
+ 
+ ## Model Experience
+ 
+diff --git a/packages/sandbox/sandbox-windows-acl/README.zh.md b/packages/sandbox/sandbox-windows-acl/README.zh.md
+index dc7f4d4c08..aca0660b26 100644
+--- a/packages/sandbox/sandbox-windows-acl/README.zh.md
++++ b/packages/sandbox/sandbox-windows-acl/README.zh.md
+@@ -83,6 +83,7 @@ koffi 结构体定义在模块加载时对照探针断言其大小，因此头
+ - **环境临时根目录绝不会被隐式授权。** 直接使用 `AclSandbox` 的 workspace-write 调用方必须提供一个已存在的私有 `tempDir` 及其不同的 `tempWriteSid`，或通过 `tempDir: null` 显式禁用临时写入。实际临时目录不得与任何可写根目录重叠。seam 会创建随机私有目录；无 agent runner 调用把 `--temp` 视为父根目录并自行创建随机子目录，但如果工作区等于或包含该父根目录，就会在任何 ACL 改动前拒绝调用。
+ - **受限子进程的临时能力按每个活跃的会话/工作区对私有。** runner 在 spawn 之前用 `SetEnvironmentVariableW` 把 TMP/TEMP 改写为该私有目录，子进程继承改写后的环境块（bwrap `--tmpfs /tmp` 的语义）。临时 ACE 与目录会在提供方 dispose 时移除，或在每次无 agent 调用后移除。崩溃可能留下失效的 `%TEMP%` 垃圾，但恢复后的提供方会选择新的随机路径和 SID，而不会与残留发生冲突或重新向其授权。原生 runner 套件证明，共享同一工作区 SID 的两个令牌无法写入彼此的临时目录。
+ - **受限令牌下 `whoami` 与令牌检查 cmdlet 会失败。** 子进程对复制令牌的 `GetTokenInformation` 部分不可用，因此 `whoami /all` 报错——这是限制方案的诊断噪音，不是运行故障；真正重要的拒绝面（文件写入）不受影响。
++- **崩溃对话框抑制是两位一体的继承契约。** runner 设置 `SEM_NOGPFAULTERRORBOX | SEM_FAILCRITICALERRORS` 并在不带 `CREATE_DEFAULT_ERROR_MODE` 的情况下 spawn，因此每个受限后代都继承这两位。`SetErrorMode` 是替换而非按位或——只重设其中一位会把整棵进程树降为一位，为初始化失败的 hard error 重新打开弹窗窗口，所以必须成对保留。Windows Error Reporting 的对话框由 `dsh-sandbox-policy` 的注册表键（`DontShowUI` + `ExcludedApplications`）另行抑制。
+ 
+ ## 模型体验
+ 
+diff --git a/packages/sandbox/sandbox-windows-acl/src/runner.ts b/packages/sandbox/sandbox-windows-acl/src/runner.ts
+index 66a7d1ae5e..28a9d1b154 100644
+--- a/packages/sandbox/sandbox-windows-acl/src/runner.ts
++++ b/packages/sandbox/sandbox-windows-acl/src/runner.ts
+@@ -52,12 +52,17 @@ import * as abi from './win32-abi.ts'
+ import { AclSandbox, assertTempRootOutsideWorkspace } from './index.ts'
+ import { tempWriteSid, workspaceWriteSid } from './workspace-sid.ts'
+ 
+-// Set SEM_NOGPFAULTERRORBOX at MODULE load time, synchronously, before main()
+-// runs or any import can throw. This way crash-dialog suppression is active
+-// even when the runner fails during module loading (e.g. a later import's
+-// native binding crashes). win32Sync() returns the cached FFI table; calling
+-// it again in main() is idempotent.
+-win32Sync().setErrorMode(abi.SEM_NOGPFAULTERRORBOX)
++// Set SEM_NOGPFAULTERRORBOX | SEM_FAILCRITICALERRORS at MODULE load time,
++// synchronously, before main() runs or any import can throw. This way
++// crash-dialog suppression is active even when the runner fails during module
++// loading (e.g. a later import's native binding crashes). SetErrorMode is a
++// REPLACE, not an OR: passing only SEM_NOGPFAULTERRORBOX would clear the
++// SEM_FAILCRITICALERRORS bit inherited from the server, breaking its
++// process-tree-wide suppression (children created without
++// CREATE_DEFAULT_ERROR_MODE inherit exactly this process's mode).
++// win32Sync() returns the cached FFI table; calling it again in main() is
++// idempotent.
++win32Sync().setErrorMode(abi.SEM_NOGPFAULTERRORBOX | abi.SEM_FAILCRITICALERRORS)
+ 
+ const RUNNER_SIGNATURE = 'windows-acl-run'
+ const RUNNER_FAILURE_EXIT = 127
+@@ -140,9 +145,12 @@ async function main(): Promise<number> {
+ 
+   const api = await win32()
+   // Suppress Windows "Application Error" dialogs for spawn failures under the
+-  // restricted token. Omit CREATE_DEFAULT_ERROR_MODE when spawning so the child
+-  // naturally inherits this error mode — and, by default, its own children inherit it too.
+-  api.setErrorMode(abi.SEM_NOGPFAULTERRORBOX)
++  // restricted token. Both bits again (replace semantics, see module load):
++  // omitting CREATE_DEFAULT_ERROR_MODE at spawn makes the confined child
++  // inherit exactly this process's mode — and, by default, its own children
++  // inherit it too, so the server's two suppression bits survive the whole
++  // confined tree instead of degrading to one here.
++  api.setErrorMode(abi.SEM_NOGPFAULTERRORBOX | abi.SEM_FAILCRITICALERRORS)
+   // Ignore this process's own CTRL+C: the confined child (same console) keeps
+   // handling its own; the runner must survive to revoke grants and mirror the
+   // child's exit code.
+diff --git a/packages/sandbox/sandbox-windows-acl/src/spawn.ts b/packages/sandbox/sandbox-windows-acl/src/spawn.ts
+index 3b850ddd11..2d9d3c8389 100644
+--- a/packages/sandbox/sandbox-windows-acl/src/spawn.ts
++++ b/packages/sandbox/sandbox-windows-acl/src/spawn.ts
+@@ -125,7 +125,8 @@ export function spawnSandboxed(
+     token, null, commandLine,
+     null, null,
+     1, // bInheritHandles: required for redirection
+-    0, // no CREATE_DEFAULT_ERROR_MODE → child inherits SEM_NOGPFAULTERRORBOX (no-window variants unusable under restriction)
++    // No CREATE_DEFAULT_ERROR_MODE: the child inherits both suppression bits.
++    0,
+     null, options.cwd,
+     startupInfo, processInfo,
+   )
+@@ -309,7 +310,9 @@ export function spawnSandboxedInherited(
+     token, null, commandLine,
+     null, null,
+     1, // bInheritHandles: the re-enabled std handles must be inheritable
+-    abi.CREATE_SUSPENDED, // suspended for job assignment; no CREATE_DEFAULT_ERROR_MODE → child inherits SEM_NOGPFAULTERRORBOX
++    // Suspended for job assignment; no CREATE_DEFAULT_ERROR_MODE: the child
++    // inherits both suppression bits.
++    abi.CREATE_SUSPENDED,
+     null, options.cwd,
+     startupInfo, processInfo,
+   )
+diff --git a/packages/sandbox/sandbox-windows-acl/tests/runner.spec.ts b/packages/sandbox/sandbox-windows-acl/tests/runner.spec.ts
+index 19dfdaf106..92672e21b1 100644
+--- a/packages/sandbox/sandbox-windows-acl/tests/runner.spec.ts
++++ b/packages/sandbox/sandbox-windows-acl/tests/runner.spec.ts
+@@ -293,8 +293,29 @@ describe.skipIf(!isWin32 || !pwshAvailable())('windows-acl runner', () => {
+     expect(existsSync(marker)).toBe(false)
+   }, 15_000)
+ 
+-  it('confined children spawn grandchildren with inherited stdio; piped capture stays denied (named-pipe default SD template)', () => {
+-    // Two-layer pin of the grandchild-spawn boundary:
++  it('runner keeps BOTH suppression bits (SEM_NOGPFAULTERRORBOX | SEM_FAILCRITICALERRORS) in the confined tree', () => {
++    // SetErrorMode is a REPLACE, not an OR: a runner that re-set only
++    // SEM_NOGPFAULTERRORBOX would downgrade the SEM_FAILCRITICALERRORS bit
++    // inherited from the server, and children created without
++    // CREATE_DEFAULT_ERROR_MODE inherit exactly the runner's mode — the
++    // process-tree-wide dialog suppression would silently shrink at this
++    // hop. GetErrorMode reads the confined child's actual mode back.
++    const probe = "const koffi=require('koffi');const k=koffi.load('kernel32.dll');const g=k.func('__stdcall','GetErrorMode','uint32',[]);console.log('ERROR-MODE: 0x'+g().toString(16))"
++    const result = runRunner([
++      '--workspace', writableDir, '--temp', isolatedTemp, '--mode', 'read-only',
++      '--', process.execPath, '-e', probe,
++    ])
++    expect(result.status, `stderr: ${result.stderr}`).toBe(0)
++    const match = /ERROR-MODE: 0x([0-9a-f]+)/u.exec(result.stdout)
++    const reportedMode = match?.[1]
++    expect(reportedMode, `stdout: ${result.stdout}`).toBeDefined()
++    // 0x3 = SEM_FAILCRITICALERRORS | SEM_NOGPFAULTERRORBOX. GetErrorMode also
++    // reports SEM_NOOPENFILEERRORBOX (0x8000), a legacy always-set bit on
++    // modern Windows regardless of what SetErrorMode wrote — mask it off.
++    expect(Number.parseInt(reportedMode as string, 16) & 0x3).toBe(0x3)
++  }, 30_000)
++
++  it('confined children spawn grandchildren with inherited stdio; piped capture stays denied (named-pipe default SD template)', () => {    // Two-layer pin of the grandchild-spawn boundary:
+     //  - the token default DACL carries a restricting-SID ACE (set in init),
+     //    so ANONYMOUS pipe creation (CreatePipe — the token-default-DACL
+     //    consumer) works and inherited/ignored stdio spawns succeed;
