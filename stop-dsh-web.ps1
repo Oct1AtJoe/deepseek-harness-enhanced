@@ -1,4 +1,4 @@
-# stop-dsh-web.ps1 - 停止 dsh web 后台进程 (port 3080)
+﻿# stop-dsh-web.ps1 - 停止 dsh web 后台进程 (port 3080)
 # 用法: powershell -NoProfile -ExecutionPolicy Bypass -File stop-dsh-web.ps1
 # 注意: 用 netstat 而非 Get-NetTCPConnection，因为 DSH 沙盒下 WMI/CIM 被隔离，
 #       Get-NetTCPConnection 永远返回空。
