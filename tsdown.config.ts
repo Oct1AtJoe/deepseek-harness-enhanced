@@ -1,3 +1,4 @@
+import { join } from 'node:path'
 import { defineConfig } from 'tsdown'
 import { typertPlugin } from './packages/typert/generator/lib/types/tsdown-plugin.js'
 
@@ -16,13 +17,8 @@ function isBuildFaceClient(value: unknown): boolean {
 export default defineConfig(({ env }) => {
   const client = isBuildFaceClient(env?.DSH_BUILD_FACE)
   return {
-    // kanye-pet has its own build system (esbuild scripts) and no TypeScript
-    // source; exclude it from the tsdown workspace to avoid entry resolution.
-    workspace: {
-      include: ['vendor/*', 'packages/*/*', 'apps/cli'],
-      exclude: ['**/kanye-pet'],
-    },
-    entry: client ? '' : ['lib/types/{index,invariant,startup}.js'],
+    workspace: ['vendor/*', 'packages/*/*', 'apps/cli'],
+    entry: client ? '' : [join(import.meta.dirname, 'lib/types/index.js'), join(import.meta.dirname, 'lib/types/invariant.js'), join(import.meta.dirname, 'lib/types/startup.js')],
     outDir: 'lib',
     format: ['esm'],
     platform: 'node',
