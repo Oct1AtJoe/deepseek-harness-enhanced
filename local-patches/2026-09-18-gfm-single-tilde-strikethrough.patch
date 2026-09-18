@@ -1,0 +1,51 @@
+diff --git a/packages/client/ui-primitives/src/markdown/parse.ts b/packages/client/ui-primitives/src/markdown/parse.ts
+index 50f8f179b9..ebec5ea984 100644
+--- a/packages/client/ui-primitives/src/markdown/parse.ts
++++ b/packages/client/ui-primitives/src/markdown/parse.ts
+@@ -6,6 +6,11 @@
+  * plus the math extensions, so the arms differ only where TeX delimiters
+  * begin a math construct (a `$$` block is a paragraph while streaming and a
+  * math block once settled, by design).
++ *
++ * Both arms pass `singleTilde: false`. GFM's default pairs any two lone `~`,
++ * and a lone `~` is the ordinary range separator in CJK and technical prose
++ * (`15~40 sec`, `16:00~18:30`), so the second one to stream in retroactively
++ * strikes text the reader has already seen. `~~text~~` is unaffected.
+  */
+ 
+ import type { Root } from 'mdast'
+@@ -25,7 +30,7 @@ import { mathCompatibility } from './mathCompatibility.ts'
+  */
+ export function parseGfm(text: string): Root {
+   return fromMarkdown(text, {
+-    extensions: [gfm(), cjkFriendlyStrong()],
++    extensions: [gfm({ singleTilde: false }), cjkFriendlyStrong()],
+     mdastExtensions: [gfmFromMarkdown()],
+   })
+ }
+@@ -38,7 +43,7 @@ export function parseGfm(text: string): Root {
+  */
+ export function parseGfmWithMath(text: string): Root {
+   return fromMarkdown(text, {
+-    extensions: [gfm(), cjkFriendlyStrong(), mathCompatibility(), math()],
++    extensions: [gfm({ singleTilde: false }), cjkFriendlyStrong(), mathCompatibility(), math()],
+     mdastExtensions: [gfmFromMarkdown(), mathFromMarkdown()],
+   })
+ }
+diff --git a/packages/client/ui-primitives/tests/markdown.client.spec.tsx b/packages/client/ui-primitives/tests/markdown.client.spec.tsx
+index a16d0464cb..c0f4526319 100644
+--- a/packages/client/ui-primitives/tests/markdown.client.spec.tsx
++++ b/packages/client/ui-primitives/tests/markdown.client.spec.tsx
+@@ -60,6 +60,12 @@ describe('MarkdownText', () => {
+     expect(screen.getByRole('link', { name: 'https://deepseek.com' })).toBeTruthy()
+   })
+ 
++  it('keeps a lone tilde range separator out of strikethrough', () => {
++    const { container } = render(<MarkdownText text={'排队 15~40 秒与 16:00~18:30 峰值，~~真删除~~'} />)
++    expect(container.querySelector('del')?.textContent).toBe('真删除')
++    expect(container.textContent).toContain('15~40')
++  })
++
+   it('closes punctuation-terminated strong emphasis before adjacent CJK text', () => {
+     const cases = [
+       ['**注意：**内容', '注意：'],

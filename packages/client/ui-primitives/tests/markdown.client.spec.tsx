@@ -60,6 +60,12 @@ describe('MarkdownText', () => {
     expect(screen.getByRole('link', { name: 'https://deepseek.com' })).toBeTruthy()
   })
 
+  it('keeps a lone tilde range separator out of strikethrough', () => {
+    const { container } = render(<MarkdownText text={'排队 15~40 秒与 16:00~18:30 峰值，~~真删除~~'} />)
+    expect(container.querySelector('del')?.textContent).toBe('真删除')
+    expect(container.textContent).toContain('15~40')
+  })
+
   it('closes punctuation-terminated strong emphasis before adjacent CJK text', () => {
     const cases = [
       ['**注意：**内容', '注意：'],

@@ -6,6 +6,11 @@
  * plus the math extensions, so the arms differ only where TeX delimiters
  * begin a math construct (a `$$` block is a paragraph while streaming and a
  * math block once settled, by design).
+ *
+ * Both arms pass `singleTilde: false`. GFM's default pairs any two lone `~`,
+ * and a lone `~` is the ordinary range separator in CJK and technical prose
+ * (`15~40 sec`, `16:00~18:30`), so the second one to stream in retroactively
+ * strikes text the reader has already seen. `~~text~~` is unaffected.
  */
 
 import type { Root } from 'mdast'
@@ -25,7 +30,7 @@ import { mathCompatibility } from './mathCompatibility.ts'
  */
 export function parseGfm(text: string): Root {
   return fromMarkdown(text, {
-    extensions: [gfm(), cjkFriendlyStrong()],
+    extensions: [gfm({ singleTilde: false }), cjkFriendlyStrong()],
     mdastExtensions: [gfmFromMarkdown()],
   })
 }
@@ -38,7 +43,7 @@ export function parseGfm(text: string): Root {
  */
 export function parseGfmWithMath(text: string): Root {
   return fromMarkdown(text, {
-    extensions: [gfm(), cjkFriendlyStrong(), mathCompatibility(), math()],
+    extensions: [gfm({ singleTilde: false }), cjkFriendlyStrong(), mathCompatibility(), math()],
     mdastExtensions: [gfmFromMarkdown(), mathFromMarkdown()],
   })
 }

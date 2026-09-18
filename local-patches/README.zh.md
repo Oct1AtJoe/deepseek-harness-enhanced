@@ -19,6 +19,7 @@ bash local-patches/apply-local-patches.sh
 ## 当前补丁
 
 - `2026-08-29-windows-acl-error-mode-suppression-pair.patch` — Windows ACL runner 崩溃对话框两位抑制修复（`SEM_NOGPFAULTERRORBOX | SEM_FAILCRITICALERRORS` 成对保留），对应 `.agents/notes/implemented/bug-fix/` 下同名 Agent Note。
+- `2026-09-18-gfm-single-tilde-strikethrough.patch` — markdown 渲染器 `singleTilde: false` 修复，阻止中文与技术文本里的孤立 `~` 区间分隔符被渲染成删除线。说明写在 [LOCAL-CHANGES.md](../LOCAL-CHANGES.md) 第 9 条而非 Agent Note，因为本 fork 的本地修复记录统一放在那里。
 
 ## 维护约定
 

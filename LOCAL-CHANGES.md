@@ -198,6 +198,180 @@ reference），且 `packages/client/ui-msg-nav` 与生态版 src 完全重复（
 
 ---
 
+## 5. Fix: `dsh web` 默认不弹浏览器，改为 `--open` 显式开启
+
+**提交**：`8095536399`（2026-08-22）
+
+**问题**：`openBrowser` 默认 `true`，每次 `dsh web` 启动都自动拉起系统默认浏览器。多实例、远程访问、脚本化启动场景下持续产生干扰窗口。
+
+### 修改文件
+
+#### `packages/bundle/web-app/src/index.ts`
+
+```diff
+ export const Config: z<Config> = z.object({
+-  openBrowser: z.boolean().default(true),
++  openBrowser: z.boolean().default(false),
+```
+
+#### `packages/bundle/web-app/src/startup.ts`
+
+```diff
+-    .option('--no-open', 'do not open the Web UI in the default browser')
++    .option('--open', 'open the Web UI in the default browser after startup')
+```
+
+#### `apps/cli/tests/web-browser-open.snapshot.ts`
+
+两处 argv 补 `'--open'`（opt-in 后必须显式传才触发 opener）。
+
+---
+
+## 6. Fix: vendor cordis `const enum FiberState` 不 emit 运行时值
+
+**提交**：`1025300435`（2026-08-30）
+
+**问题**：`const enum` 成员在编译期被内联，**不生成运行时对象**。lib 模式消费者（逐文件 emit、或跨包按值引用 `FiberState.X`）拿到 `undefined`，运行期崩溃。
+
+### 修改文件
+
+#### `vendor/cordis/src/fiber.ts`
+
+```diff
+- export const enum FiberState {
++ export enum FiberState {
+    PENDING,
+```
+
+### 通用规则
+
+本仓库中**任何会被跨包按值引用的枚举一律用 `enum`，不用 `const enum`**。遇到 `undefined is not a function` / `Cannot read properties of undefined` 且指向枚举成员时，先查是否 `const enum`。
+
+---
+
+## 7. Fix: `import type` 擦除导致运行时值缺失
+
+**提交**：`0ecc22c882`（2026-09-14）
+
+**问题**：`SessionLogOffset` 是 branded 运行时函数，却被写在 `import type { ... }` 里。类型导入编译后整体擦除，冷投影列表路径调用它时 `ReferenceError`。
+
+### 修改文件
+
+#### `packages/api/session-controller/src/list.ts`
+
+```diff
+- import type { Session, SessionEvent, SessionHeader, SessionId } from '@deepseek-ai/dsh-session'
++ import { SessionLogOffset, type Session, type SessionEvent, type SessionHeader, type SessionId } from '@deepseek-ai/dsh-session'
+```
+
+> 注：该调用点在 #8 中已改为可选参数并移除，但**同类风险规则保留**：值与类型混用时，值必须走非 `type` 导入。
+
+---
+
+## 8. Fix: seeded 冷会话在列表里读不到缓存标题
+
+**提交**：`e195383680`（2026-09-17，`bc34a04504` 为 rebase 重复）
+
+**问题**：`ApiSessionList` 冷路径对 `header.isSeeded` 直接返回 `undefined`，导致种子会话在会话列表里标题始终空白，必须等会话被真正打开、投影水合后才出现。
+
+根因是 checkpoint 身份要求精确的 `inheritedEventCount`，而冷列表只有 header，拿不到这个切点。
+
+### 修改文件
+
+#### `packages/session/session-projection-cache/src/index.ts`
+
+```diff
+ type CurrentCheckpointIdentity = CheckpointIdentity & {
+   formatVersion: number
+   isSeeded: boolean
+-  inheritedEventCount: SessionLogOffset
++  inheritedEventCount?: SessionLogOffset
+ }
+
+   cachedSnapshot(
+     meta: SessionHeader,
+-    inheritedEventCount: SessionLogOffset,
++    inheritedEventCount?: SessionLogOffset,
+     keys?: readonly Extract<keyof SessionProjectionMap, string>[],
+   ): ProjectionSnapshot | undefined {
+```
+
+省略 `inheritedEventCount` 时为 best-effort hint 读，按 `createdAt` + `cwd` + `isSeeded` 匹配；严格传精确切点的调用方继续拒绝不匹配的 checkpoint。`cachedPredecessorTitle` 同步改为可选。
+
+#### `packages/api/session-controller/src/list.ts`
+
+```diff
+-      const block = session === undefined
+-        ? header.isSeeded
+-          ? undefined
+-          : cache?.cachedSnapshot(header, SessionLogOffset(0))
+-            ?? cache?.cachedPredecessorTitle(header, SessionLogOffset(0))
+-        : this.ctx.sessionProjections.cachedSnapshot(session)
++      const block = session === undefined
++        ? cache?.cachedSnapshot(header)
++          ?? cache?.cachedPredecessorTitle(header)
++        : this.ctx.sessionProjections.cachedSnapshot(session)
+```
+
+**已知边界**：会话在打开前被原地 re-seed，可能读到上一代的值。会话真正打开后由 history tail 基线覆盖为权威值。
+
+---
+
+## 9. Fix: GFM 单波浪号把中文数字区间误渲染成删除线
+
+**状态**：本轮修复，尚未提交
+
+**问题**：`packages/client/ui-primitives/src/markdown/parse.ts` 无参调用 `gfm()`，继承 `micromark-extension-gfm-strikethrough` 的默认 `singleTilde: true`——任意两个孤立 `~` 即配对成删除线。
+
+半角 `~` 是中文与技术文本里的常规区间分隔符（`15~40 秒`、`16:00~18:30`），因此模型输出**必然**高频触发：
+
+```
+每天下午 16:00~18:30 …… 排队 15~40 秒
+      ↑ 定界符 1                  ↑ 定界符 2  → 中间整段被 <del> 划掉
+```
+
+流式渲染下更严重：实测前 40 个字符正常显示，第 41 个字符（第二个 `~`）落地瞬间，**已经稳定呈现、读者可能已读完的 22 个字符追溯性回跳为删除线**。
+
+这不是规范偏离（GFM 默认即如此，GitHub 相同），而是**默认值与本仓库场景不匹配**，且与本目录 `cjkFriendlyStrong()` 已确立的"CommonMark/GFM 空白与标点假设对 CJK 不成立，需覆盖"方向一致。
+
+### 修改文件
+
+#### `packages/client/ui-primitives/src/markdown/parse.ts`
+
+两个渲染臂**必须同时改**（settled 语法 = streaming 语法 + math，只改一处会造成两臂不一致）：
+
+```diff
+-    extensions: [gfm(), cjkFriendlyStrong()],
++    extensions: [gfm({ singleTilde: false }), cjkFriendlyStrong()],
+```
+
+```diff
+-    extensions: [gfm(), cjkFriendlyStrong(), mathCompatibility(), math()],
++    extensions: [gfm({ singleTilde: false }), cjkFriendlyStrong(), mathCompatibility(), math()],
+```
+
+> `gfm()` **没有**关闭 strikethrough 的开关：`micromark-extension-gfm@3.0.0` 无条件把 options 透传给 `gfmStrikethrough(options)`。传 `{ strikethrough: false }` 无效，只有 `singleTilde` 这个粒度。`~~text~~` 双波浪号删除线不受影响。
+
+#### `packages/client/ui-primitives/tests/markdown.client.spec.tsx`
+
+新增回归守卫 `keeps a lone tilde range separator out of strikethrough`，同时 pin 两件事：单 `~` 不划线、`~~` 仍划线。
+
+### 验证方法
+
+```powershell
+pnpm vitest run packages/client/ui-primitives/tests/markdown.client.spec.tsx `
+  packages/client/ui-primitives/tests/markdown-dom-parity.client.spec.tsx `
+  packages/client/ui-primitives/tests/markdown-incremental.client.spec.tsx
+# 113 passed
+
+pnpm run typecheck:contracts-ready   # exit 0
+```
+
+反向验证：临时回退 `singleTilde` 后该测试确实失败，报
+`AssertionError: expected '40 秒与 16:00' to be '真删除'`——正是 bug 的复现形态。
+
+---
+
 ## 重建
 
 ```sh
@@ -212,5 +386,9 @@ pnpm run build:lib
 
 ```
 214ee4f8bf feat: add 4 glassmorphism themes + crash-dialog fix
-（本轮修复尚未提交）
+8095536399 fix(web): change browser-open default to false, add --open flag      (#5)
+1025300435 fix(vendor): emit runtime FiberState export for lib-mode consumers    (#6)
+0ecc22c882 fix(session-controller): import SessionLogOffset runtime value        (#7)
+e195383680 fix(session): serve cached title for seeded cold sessions             (#8)
+（#9 GFM singleTilde 本轮修复，尚未提交）
 ```

@@ -19,6 +19,7 @@ The script locates the repository root itself, so every git operation runs there
 ## Current patches
 
 - `2026-08-29-windows-acl-error-mode-suppression-pair.patch` — the Windows ACL runner two-bit crash-dialog suppression fix (`SEM_NOGPFAULTERRORBOX | SEM_FAILCRITICALERRORS` kept as a pair), matching the same-named Agent Note under `.agents/notes/implemented/bug-fix/`.
+- `2026-09-18-gfm-single-tilde-strikethrough.patch` — the markdown renderer `singleTilde: false` fix that stops a lone `~` range separator in CJK and technical prose from rendering as strikethrough. Written up as item 9 of [LOCAL-CHANGES.md](../LOCAL-CHANGES.md) rather than an Agent Note, since this fork keeps its local-fix log there.
 
 ## Maintenance conventions
 
